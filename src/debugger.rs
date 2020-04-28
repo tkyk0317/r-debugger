@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::{self, Write};
 use nix::unistd::{ Pid };
 use nix::sys::wait::*;
@@ -7,12 +6,21 @@ use nix::sys::ptrace::{ cont, read, write, step, getregs, setregs, kill, Address
 use crate::elf::Elf64;
 use crate::memory_map::MemoryMap;
 
+// ブレイクポイントリスト
+#[derive(Clone)]
+struct Breakpoint {
+    sym_name: String, // ブレイクポイントを貼るシンボル名
+    inst: usize,      // ブレイクポイント箇所の命令列
+    load_addr: u64,   // 実際にロードされているアドレス（キー）
+    addr: u64,        // シンボルテーブルに記載されているアドレス
+}
+
 // デバッガ
 pub struct Debugger {
     pid: Pid,
     path: String,
     address: u64,
-    breaklist: HashMap<u64, u64>,
+    breakpoints: Vec<Breakpoint>,
     memory_map: MemoryMap,
     elf: Elf64,
 }
@@ -24,7 +32,7 @@ impl Debugger {
         Debugger {
             path: path.clone(),
             pid: pid,
-            breaklist: HashMap::new(),
+            breakpoints: vec![],
             address: 0x0,
             memory_map: MemoryMap::new(pid),
             elf: Elf64::new(path.clone()),
@@ -73,6 +81,7 @@ impl Debugger {
             let bp = self.read_regs().rip - 1;
             if self.is_breakpoint(bp) {
                 self.recover_bp(bp);
+                println!("break at 0x{:x}", bp);
             }
 
             // シェルから入力を受け付ける
@@ -88,8 +97,8 @@ impl Debugger {
     /// 4. SIGTRAPを待ち、1で書き換えたブレイクポイントを貼る
     fn recover_bp(&mut self, bp: u64) {
         // 命令を書き換える
-        let org_inst = self.breaklist.get(&bp).unwrap();
-        write(self.pid, bp as AddressType, *org_inst as AddressType).expect("recover_bp is failed");
+        let bp_info = self.search_bp(bp).unwrap();
+        write(self.pid, bp as AddressType, bp_info.inst as AddressType).expect("recover_bp is failed");
 
         // ripを元にもどす
         let mut regs = self.read_regs();
@@ -102,14 +111,26 @@ impl Debugger {
         // SIGTRAP待ち
         match nix::sys::wait::waitpid(self.pid, None).expect("recover_bp: wait is failed") {
             // ブレイクポイントの設定をもとにもどす
-            WaitStatus::Stopped(_pid, _sig) => self.breakpoint(bp - self.address),
+            WaitStatus::Stopped(_pid, _sig) => self.breakpoint(bp_info.addr, &bp_info.sym_name),
             _ => panic!("recover_bp do not expect event")
         };
     }
 
+    /// アドレスからブレイクポイント情報取得
+    ///
+    /// 実際にロードされているアドレスを引数に受け取り、ブレイクポイントリストをサーチする
+    fn search_bp(&self, addr: u64) -> Option<Breakpoint> {
+        self.breakpoints.iter()
+                        .map(|b| b.clone())
+                        .find(|b| b.load_addr == addr)
+    }
+
     /// ブレイクポイントにヒットするか？
     fn is_breakpoint(&self, rip: u64) -> bool {
-        self.breaklist.contains_key(&rip)
+        match self.search_bp(rip) {
+            Some(_) => true,
+            None => false
+        }
     }
 
     /// 入力待ち
@@ -165,16 +186,19 @@ impl Debugger {
             Some(s) => {
                 // シンボル→アドレス変換したものをブレイクポイント設定
                 let addr = s.st_value;
-                self.breakpoint(addr);
+                self.breakpoint(addr, sym);
+                println!("Braekpoint at 0x{:x}", addr);
             }
             _ => println!("not found symbol: {}", sym)
         };
     }
 
     /// シェルからのブレイクポイントリリース
-    fn sh_release_break(&mut self, addr: &String) {
-        let addr = u64::from_str_radix(addr.trim_start_matches("0x"), 16).unwrap();
-        self.release_break(addr)
+    fn sh_release_break(&mut self, no: &String) {
+        let ret = self.release_break(no.parse::<usize>().unwrap());
+        if ret {
+            println!("release Breakpoint({})", no);
+        }
     }
 
     /// シェルからのプログラム停止
@@ -186,36 +210,59 @@ impl Debugger {
     /// break point設定
     ///
     /// int 3命令を下位1バイトに埋め込み、ソフトウェア割り込みを発生させる
-    fn breakpoint(&mut self, addr: u64) -> u64 {
-        println!("Braekpoint at 0x{:x}", addr);
+    fn breakpoint(&mut self, addr: u64, sym: &String) {
+        // ブレイクポイント設定
+        let address = self.address + addr;
 
         // int 3命令を埋め込む
-        let address = self.address + addr;
         let inst = read(self.pid, address as AddressType).expect("ptrace::read failed");
         let int_code = (0xFFFF_FFFF_FFFF_FF00 & inst as u64) | 0xCC;
         write(self.pid, address as AddressType, int_code as AddressType).expect("ptrace::write failed");
 
-        // アドレスと埋め込み前の命令を保存
-        self.breaklist.insert(address, inst as u64);
-
-        return inst as u64;
+        // 既にブレイクポイントが登録されていれば、登録しない
+        match self.search_bp(address) {
+            None => {
+                // ブレイクポイント保存
+                self.breakpoints.push(Breakpoint {
+                    inst: inst as usize, load_addr: address, addr: addr, sym_name: sym.to_string() }
+                );
+            }
+            Some(_) => {}
+        }
     }
 
     /// break point解除
-    fn release_break(&mut self, addr: u64) {
-        // HashMapからinstractionを取得し、元の命令に書き換える
-        let inst = self.breaklist.get(&addr).unwrap();
-        println!("release Breakpoint at 0x{:x} (0x{:x})", addr, inst);
-        write(self.pid, addr as AddressType, *inst as AddressType).expect("ptrace::write failed");
+    ///
+    /// 指定されたインデックスに存在するブレイクポイントを削除
+    fn release_break(&mut self, no: usize) -> bool {
+        // 範囲外は処理しない
+        if self.breakpoints.len() == 0 || self.breakpoints.len() - 1 < no {
+            println!("not found breakpoint at no.{}", no);
+            println!("usage: d [no]");
+            return false;
+        }
 
-        // HashMapから登録を削除
-        self.breaklist.remove(&addr);
+        // ブレイクポイント前の命令に書き換え
+        let bp = self.search_bp(self.breakpoints[no].load_addr).unwrap();
+        write(
+            self.pid,
+            bp.load_addr as AddressType,
+            bp.inst as AddressType
+        ).expect("ptrace::write failed");
+
+        // アドレスが示すブレイクポイントを削除
+        self.breakpoints.remove(no);
+
+        true
     }
 
     /// break point表示
     fn show_break(&self) {
-        for b in self.breaklist.keys() {
-            println!("addr: 0x{:x}", b);
+        for (i, b) in self.breakpoints.iter().enumerate() {
+            println!(
+                "{}: {}(0x{:x}[0x{:x}])",
+                i, b.sym_name, b.load_addr, b.addr
+            );
         }
     }
     /// ptrace cont実行

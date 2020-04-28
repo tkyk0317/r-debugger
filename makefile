@@ -1,7 +1,7 @@
 .PHONY: all
 all:
 	@cargo b
-	@cd sample && clang++ -g main.cpp -o test
+	@cd sample && clang++ -g test.cpp main.cpp -o test
 	@cd ..
 
 .PHONY: strace

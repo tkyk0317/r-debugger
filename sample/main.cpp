@@ -3,6 +3,8 @@
 
 using namespace std;
 
+extern void printTest();
+
 class Test {
 public:
     Test() {}
@@ -26,6 +28,7 @@ int main() {
         test.test(i);
         sleep(1);
     }
+    printTest();
     cout << "child process end" << endl;
 
     return 0;
