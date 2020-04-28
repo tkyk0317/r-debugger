@@ -1,3 +1,4 @@
 /target
 /.ccls-cache
 /sample/test
+.gdb_history
