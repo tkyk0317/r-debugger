@@ -225,7 +225,7 @@ impl Debugger {
                 // ブレイクポイント表示
                 "bl" => self.show_break(),
                 // レジスタ表示
-                "readregs" => self.show_regs(),
+                "info" if coms.len() == 2 && "regs" == coms[1] => self.show_regs(),
                 // 終了
                 "quit" => self.sh_quit(),
                 _ => println!("not support command: {}", coms[0])
@@ -325,7 +325,32 @@ impl Debugger {
 
     /// レジスタ情報表示
     fn show_regs(&self) {
-        println!("{:?}", self.read_regs());
+        let regs = self.read_regs();
+        println!("orig_rax: 0x{:016x}", regs.orig_rax);
+        println!("rip     : 0x{:016x}", regs.rip);
+        println!("rsp     : 0x{:016x}", regs.rsp);
+        println!("r15     : 0x{:016x}", regs.r15);
+        println!("r14     : 0x{:016x}", regs.r14);
+        println!("r13     : 0x{:016x}", regs.r13);
+        println!("r12     : 0x{:016x}", regs.r12);
+        println!("r11     : 0x{:016x}", regs.r11);
+        println!("r10     : 0x{:016x}", regs.r10);
+        println!("r9      : 0x{:016x}", regs.r9);
+        println!("r8      : 0x{:016x}", regs.r8);
+        println!("rax     : 0x{:016x}", regs.rax);
+        println!("rcx     : 0x{:016x}", regs.rcx);
+        println!("rdx     : 0x{:016x}", regs.rdx);
+        println!("rsi     : 0x{:016x}", regs.rsi);
+        println!("rdi     : 0x{:016x}", regs.rdi);
+        println!("cs      : 0x{:016x}", regs.cs);
+        println!("eflags  : 0x{:016x}", regs.eflags);
+        println!("ss      : 0x{:016x}", regs.ss);
+        println!("fs_base : 0x{:016x}", regs.fs_base);
+        println!("gs_base : 0x{:016x}", regs.gs_base);
+        println!("ds      : 0x{:016x}", regs.ds);
+        println!("es      : 0x{:016x}", regs.es);
+        println!("fs      : 0x{:016x}", regs.fs);
+        println!("gs      : 0x{:016x}", regs.gs);
     }
 
     /// レジスタ読み込み
@@ -346,7 +371,7 @@ impl Debugger {
         println!("bl : show breakpoints");
         println!("c : continue program");
         println!("s : step-in");
-        println!("readregs : show registers");
+        println!("info regs : show registers");
         println!("quit : quit program");
         println!("*************************************************************");
     }
