@@ -6,21 +6,81 @@ use nix::sys::ptrace::{ cont, read, write, step, getregs, setregs, kill, Address
 use crate::elf::Elf64;
 use crate::memory_map::MemoryMap;
 
+
 // ブレイクポイントリスト
 #[derive(Clone)]
 struct Breakpoint {
-    sym_name: String, // ブレイクポイントを貼るシンボル名
-    inst: usize,      // ブレイクポイント箇所の命令列
-    load_addr: u64,   // 実際にロードされているアドレス（キー）
-    addr: u64,        // シンボルテーブルに記載されているアドレス
+    sym: String,    // ブレイクポイントを貼るシンボル名
+    inst: usize,    // ブレイクポイント箇所の命令列
+    addr: usize,    // シンボルテーブルに記載されているアドレス
+}
+
+// ブレイクポイント管理
+struct BreakpointList {
+    breakpoints: Vec<Breakpoint>,
+}
+
+/// ブレイクポイント管理strcut実装
+impl BreakpointList {
+    /// コンストラクタ
+    pub fn new() -> Self {
+        BreakpointList { breakpoints: vec![] }
+    }
+
+    /// ブレイクポイント設定取得
+    pub fn get(&self) -> &Vec<Breakpoint> {
+        &self.breakpoints
+    }
+
+    /// ブレイクポイント登録
+    pub fn register(&mut self, sym: &String, addr: usize, inst: usize) -> bool {
+        // 既に登録されている場合、登録しない
+        match self.breakpoints.iter().find(|b| b.addr == addr) {
+            Some(_) => true,
+            None => {
+                // ブレイクポイント登録
+                self.breakpoints.push({
+                    Breakpoint { sym: sym.to_string(), addr: addr, inst: inst }
+                });
+                false
+            }
+        }
+    }
+
+    /// アドレスが登録されているか
+    pub fn has_addr(&self, addr: usize) -> bool {
+        match self.search(addr) {
+            Some(_) => true,
+            None => false
+        }
+    }
+
+    /// ブレイクポイントサーチ
+    pub fn search(&self, addr: usize) -> Option<Breakpoint> {
+        self.breakpoints.iter().map(|b| b.clone()).find(|b| b.addr == addr)
+    }
+
+    /// ブレイクポイント削除
+    ///
+    /// 削除したブレイクポイントを返す
+    pub fn delete(&mut self, index: usize) -> Option<Breakpoint> {
+        // インデックス外はエラー
+        let l = self.breakpoints.len();
+        if l == 0 || index >= l {
+            return None;
+        }
+
+        // ブレイクポイント削除
+        Some(self.breakpoints.remove(index).clone())
+    }
 }
 
 // デバッガ
 pub struct Debugger {
     pid: Pid,
     path: String,
-    address: u64,
-    breakpoints: Vec<Breakpoint>,
+    entry: usize, // エントリーアドレス
+    breakpoint: BreakpointList,
     memory_map: MemoryMap,
     elf: Elf64,
 }
@@ -32,8 +92,8 @@ impl Debugger {
         Debugger {
             path: path.clone(),
             pid: pid,
-            breakpoints: vec![],
-            address: 0x0,
+            entry: 0x0,
+            breakpoint: BreakpointList::new(),
             memory_map: MemoryMap::new(pid),
             elf: Elf64::new(path.clone()),
         }
@@ -71,14 +131,14 @@ impl Debugger {
             // シンボルロード（この段階でロードしないと子プロセスの情報が記載されていない）
             // ※ execvコール後の一発目のシグナル
             let map_info = self.memory_map.load();
-            self.address = u64::from_str_radix(&map_info.get(&self.path).unwrap()[0].start_address, 16).unwrap();
+            self.entry = usize::from_str_radix(&map_info.get(&self.path).unwrap()[0].start_address, 16).unwrap();
             self.elf.load();
         }
 
         // トレースシグナルであれば処理
         if sig == nix::sys::signal::Signal::SIGTRAP {
             // ブレイクポイントで停止している場合、次の命令を指している
-            let bp = self.read_regs().rip - 1;
+            let bp = (self.read_regs().rip - 1) as usize;
             if self.is_breakpoint(bp) {
                 self.recover_bp(bp);
                 println!("break at 0x{:x}", bp);
@@ -95,14 +155,14 @@ impl Debugger {
     /// 2. ripをブレイクポイントのアドレスへ再設定
     /// 3. 1step実行し、元の命令を処理
     /// 4. SIGTRAPを待ち、1で書き換えたブレイクポイントを貼る
-    fn recover_bp(&mut self, bp: u64) {
+    fn recover_bp(&mut self, bp: usize) {
         // 命令を書き換える
-        let bp_info = self.search_bp(bp).unwrap();
+        let bp_info = self.breakpoint.search(bp).unwrap();
         write(self.pid, bp as AddressType, bp_info.inst as AddressType).expect("recover_bp is failed");
 
         // ripを元にもどす
         let mut regs = self.read_regs();
-        regs.rip = bp;
+        regs.rip = bp as u64;
         self.write_regs(regs);
 
         // 1STEP実行（元の命令を実行）
@@ -111,26 +171,17 @@ impl Debugger {
         // SIGTRAP待ち
         match nix::sys::wait::waitpid(self.pid, None).expect("recover_bp: wait is failed") {
             // ブレイクポイントの設定をもとにもどす
-            WaitStatus::Stopped(_pid, _sig) => self.breakpoint(bp_info.addr, &bp_info.sym_name),
+            WaitStatus::Stopped(_, _) => {
+                // 登録する際に、エントリーアドレス分を加算しているので、差し引く
+                self.breakpoint(self.to_sym_addr(bp_info.addr), &bp_info.sym);
+            }
             _ => panic!("recover_bp do not expect event")
         };
     }
 
-    /// アドレスからブレイクポイント情報取得
-    ///
-    /// 実際にロードされているアドレスを引数に受け取り、ブレイクポイントリストをサーチする
-    fn search_bp(&self, addr: u64) -> Option<Breakpoint> {
-        self.breakpoints.iter()
-                        .map(|b| b.clone())
-                        .find(|b| b.load_addr == addr)
-    }
-
     /// ブレイクポイントにヒットするか？
-    fn is_breakpoint(&self, rip: u64) -> bool {
-        match self.search_bp(rip) {
-            Some(_) => true,
-            None => false
-        }
+    fn is_breakpoint(&self, rip: usize) -> bool {
+        self.breakpoint.has_addr(rip)
     }
 
     /// 入力待ち
@@ -152,9 +203,9 @@ impl Debugger {
             // 各コマンドを実行
             match &*coms[0] {
                 // ブレイクポイント作成
-                "b" => self.sh_breakpoint(&coms[1]),
+                "b" if coms.len() == 2 => self.sh_breakpoint(&coms[1]),
                 // ブレイクポイントリリース
-                "d" => self.sh_release_break(&coms[1]),
+                "d" if coms.len() == 2 => self.sh_release_break(&coms[1]),
                 // 再開
                 "c" => {
                     self.cont();
@@ -186,7 +237,7 @@ impl Debugger {
             Some(s) => {
                 // シンボル→アドレス変換したものをブレイクポイント設定
                 let addr = s.st_value;
-                self.breakpoint(addr, sym);
+                self.breakpoint(addr as usize, sym);
                 println!("Braekpoint at 0x{:x}", addr);
             }
             _ => println!("not found symbol: {}", sym)
@@ -210,61 +261,47 @@ impl Debugger {
     /// break point設定
     ///
     /// int 3命令を下位1バイトに埋め込み、ソフトウェア割り込みを発生させる
-    fn breakpoint(&mut self, addr: u64, sym: &String) {
+    fn breakpoint(&mut self, addr: usize, sym: &String) {
         // ブレイクポイント設定
-        let address = self.address + addr;
+        let address = self.to_abs_addr(addr);
 
         // int 3命令を埋め込む
         let inst = read(self.pid, address as AddressType).expect("ptrace::read failed");
         let int_code = (0xFFFF_FFFF_FFFF_FF00 & inst as u64) | 0xCC;
         write(self.pid, address as AddressType, int_code as AddressType).expect("ptrace::write failed");
 
-        // 既にブレイクポイントが登録されていれば、登録しない
-        match self.search_bp(address) {
-            None => {
-                // ブレイクポイント保存
-                self.breakpoints.push(Breakpoint {
-                    inst: inst as usize, load_addr: address, addr: addr, sym_name: sym.to_string() }
-                );
-            }
-            Some(_) => {}
-        }
+        // ブレイクポイント登録
+        self.breakpoint.register(sym, address, inst as usize);
     }
 
     /// break point解除
     ///
     /// 指定されたインデックスに存在するブレイクポイントを削除
-    fn release_break(&mut self, no: usize) -> bool {
-        // 範囲外は処理しない
-        if self.breakpoints.len() == 0 || self.breakpoints.len() - 1 < no {
-            println!("not found breakpoint at no.{}", no);
-            println!("usage: d [no]");
-            return false;
+    fn release_break(&mut self, index: usize) -> bool {
+        // ブレイクポイントを削除し、元の命令に書き換える
+        let bp = self.breakpoint.delete(index);
+        match bp {
+            Some(bp) => {
+                // 命令を元にもどす
+                write(
+                    self.pid,
+                    bp.addr as AddressType,
+                    bp.inst as AddressType
+                ).expect("ptrace::write failed");
+
+                true
+            }
+            None => false
         }
-
-        // ブレイクポイント前の命令に書き換え
-        let bp = self.search_bp(self.breakpoints[no].load_addr).unwrap();
-        write(
-            self.pid,
-            bp.load_addr as AddressType,
-            bp.inst as AddressType
-        ).expect("ptrace::write failed");
-
-        // アドレスが示すブレイクポイントを削除
-        self.breakpoints.remove(no);
-
-        true
     }
 
     /// break point表示
     fn show_break(&self) {
-        for (i, b) in self.breakpoints.iter().enumerate() {
-            println!(
-                "{}: {}(0x{:x}[0x{:x}])",
-                i, b.sym_name, b.load_addr, b.addr
-            );
+        for (i, b) in self.breakpoint.get().iter().enumerate() {
+            println!("{}: {} (0x{:016x})", i, b.sym, self.to_sym_addr(b.addr));
         }
     }
+
     /// ptrace cont実行
     fn cont(&self) {
         cont(self.pid, None).expect("pcont is failed");
@@ -302,6 +339,20 @@ impl Debugger {
         println!("readregs : show registers");
         println!("quit : quit program");
         println!("*************************************************************");
+    }
+
+    /// アドレス変換
+    ///
+    /// 入力されたアドレスを実際にシンボルがロードされているアドレスへ変換
+    fn to_abs_addr(&self, addr: usize) -> usize {
+        self.entry + addr
+    }
+
+    /// アドレス変換
+    ///
+    /// ロードされているアドレスから、シンボルテーブルに記載されているアドレスへ変換
+    fn to_sym_addr(&self, addr: usize) -> usize {
+        addr - self.entry
     }
 }
 
