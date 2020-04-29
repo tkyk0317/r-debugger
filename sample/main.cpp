@@ -26,7 +26,7 @@ int main() {
     for (int i = 0 ; i < 10 ; ++i) {
         test_func(i);
         test.test(i);
-        sleep(1);
+        usleep(1000* 100); // 100ms
     }
     printTest();
     cout << "child process end" << endl;

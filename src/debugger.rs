@@ -36,13 +36,13 @@ impl BreakpointList {
     pub fn register(&mut self, sym: &String, addr: usize, inst: usize) -> bool {
         // 既に登録されている場合、登録しない
         match self.breakpoints.iter().find(|b| b.addr == addr) {
-            Some(_) => true,
+            Some(_) => false,
             None => {
                 // ブレイクポイント登録
                 self.breakpoints.push({
                     Breakpoint { sym: sym.to_string(), addr: addr, inst: inst }
                 });
-                false
+                true
             }
         }
     }
@@ -113,7 +113,14 @@ impl Debugger {
                     break;
                 }
                 // シグナル受信による子プロセス停止
-                WaitStatus::Stopped(_pid, sig) => self.stopped_handler(sig, first_sig),
+                WaitStatus::Stopped(_pid, sig) => {
+                    if true == first_sig {
+                        // シンボルロード（この段階でロードしないと子プロセスの情報が記載されていない）
+                        // ※ execvコール後の一発目のシグナル
+                        self.load_elf();
+                    }
+                    self.stopped_handler(sig);
+                }
                 WaitStatus::Signaled(pid, sig, _) => println!("[start_dbg] recv signal : pid={:?}, sig={:?}", pid, sig),
                 WaitStatus::PtraceEvent(pid, sig, _) => println!("[start_dbg] ptrace event: pid={:?}, sig={:?}", pid, sig),
                 WaitStatus::Continued(pid) => println!("[start_dbg] continued : pid={:?}", pid),
@@ -125,21 +132,20 @@ impl Debugger {
         }
     }
 
-    /// WaitStatus::Stoppedハンドラ
-    fn stopped_handler(&mut self, sig: nix::sys::signal::Signal, first_sig: bool) {
-        if true == first_sig {
-            // シンボルロード（この段階でロードしないと子プロセスの情報が記載されていない）
-            // ※ execvコール後の一発目のシグナル
-            let map_info = self.memory_map.load();
-            self.entry = usize::from_str_radix(&map_info.get(&self.path).unwrap()[0].start_address, 16).unwrap();
-            self.elf.load();
-        }
+    /// ELFファイルロード
+    fn load_elf(&mut self) {
+        let map_info = self.memory_map.load();
+        self.entry = usize::from_str_radix(&map_info.get(&self.path).unwrap()[0].start_address, 16).unwrap();
+        self.elf.load();
+    }
 
+    /// WaitStatus::Stoppedハンドラ
+    fn stopped_handler(&mut self, sig: nix::sys::signal::Signal) {
         // トレースシグナルであれば処理
         if sig == nix::sys::signal::Signal::SIGTRAP {
             // ブレイクポイントで停止している場合、次の命令を指している
             let bp = (self.read_regs().rip - 1) as usize;
-            if self.is_breakpoint(bp) {
+            if self.breakpoint.has_addr(bp) {
                 self.recover_bp(bp);
                 println!("break at 0x{:x}", bp);
             }
@@ -179,11 +185,6 @@ impl Debugger {
         };
     }
 
-    /// ブレイクポイントにヒットするか？
-    fn is_breakpoint(&self, rip: usize) -> bool {
-        self.breakpoint.has_addr(rip)
-    }
-
     /// 入力待ち
     fn shell(&mut self) {
         loop {
@@ -195,7 +196,10 @@ impl Debugger {
             // コマンド入力受付
             let mut s = String::new();
             std::io::stdin().read_line(&mut s).ok();
-            let coms: Vec<String> = s.trim().split_whitespace().map(|e| e.parse().ok().unwrap()).collect();
+            let coms: Vec<String> = s.trim()
+                                     .split_whitespace()
+                                     .map(|e| e.parse().ok().unwrap())
+                                     .collect();
 
             // 空コマンドは無効
             if coms.len() <= 0 { continue; }
@@ -297,8 +301,14 @@ impl Debugger {
 
     /// break point表示
     fn show_break(&self) {
-        for (i, b) in self.breakpoint.get().iter().enumerate() {
-            println!("{}: {} (0x{:016x})", i, b.sym, self.to_sym_addr(b.addr));
+        let bps = self.breakpoint.get();
+        if bps.len() == 0 {
+            println!("not entried breakpoint");
+        }
+        else {
+            for (i, b) in self.breakpoint.get().iter().enumerate() {
+                println!("{}: {} (0x{:016x})", i, b.sym, self.to_sym_addr(b.addr));
+            }
         }
     }
 
