@@ -417,16 +417,16 @@ impl Debugger {
 
     /// ヘルプ表示
     fn help(&self) {
-        println!("*************************************************************");
-        println!("b [symbol name] : breakpoint at symbol (ex b main)");
-        println!("d [no] : delete breakpoint (ex b 1)");
-        println!("bl : show breakpoints");
-        println!("c : continue program");
-        println!("s : step-in");
-        println!("info regs : show registers");
-        println!("set regs [register] [value]: write registers (ex set regs rax 0x1000)");
-        println!("quit : quit program");
-        println!("*************************************************************");
+        println!("******************************************************************************");
+        println!("b [symbol name]             : breakpoint at symbol (ex b main)");
+        println!("d [no]                      : delete breakpoint (ex b 1)");
+        println!("bl                          : show breakpoints");
+        println!("info regs                   : show registers");
+        println!("set regs [register] [value] : write registers (ex set regs rax 0x1000)");
+        println!("c                           : continue program");
+        println!("s                           : step-in");
+        println!("quit                        : quit program");
+        println!("******************************************************************************");
     }
 
     /// アドレス変換
