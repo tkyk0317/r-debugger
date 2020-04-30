@@ -226,6 +226,8 @@ impl Debugger {
                 "bl" => self.show_break(),
                 // レジスタ表示
                 "info" if coms.len() == 2 && "regs" == coms[1] => self.show_regs(),
+                // レジスタ書き込み
+                "set" if coms.len() == 4 && "regs" == coms[1] => self.set_regs(&coms[2], &coms[3]),
                 // 終了
                 "quit" => self.sh_quit(),
                 _ => println!("not support command: {}", coms[0])
@@ -323,6 +325,56 @@ impl Debugger {
         step(self.pid, None).expect("step is failed");
     }
 
+    /// レジスタ情報設定
+    ///
+    /// レジスタ名と16進数を受け取り、レジスタへデータを設定する
+    fn set_regs(&self, reg: &str, val: &str) {
+        let val = match u64::from_str_radix(val.trim_start_matches("0x"), 16) {
+            Ok(v) => v,
+            _ => {
+                println!("parse error: {}", val);
+                return;
+            }
+        };
+
+        // 存在しているレジスタの値を更新
+        let mut regs = self.read_regs();
+        match reg {
+            "orig_rax" => regs.orig_rax = val,
+            "rip" => regs.rip = val,
+            "rsp" => regs.rsp = val,
+            "r15" => regs.r15 = val,
+            "r14" => regs.r14 = val,
+            "r13" => regs.r13 = val,
+            "r12" => regs.r12 = val,
+            "r11" => regs.r11 = val,
+            "r10" => regs.r10 = val,
+            "r9" => regs.r9 = val,
+            "r8" => regs.r8 = val,
+            "rax" => regs.rax = val,
+            "rcx" => regs.rcx = val,
+            "rdx" => regs.rdx = val,
+            "rsi" => regs.rsi = val,
+            "rdi" => regs.rdi = val,
+            "cs" => regs.cs = val,
+            "eflags" => regs.eflags = val,
+            "ss" => regs.ss = val,
+            "fs_base" => regs.fs_base = val,
+            "gs_base" => regs.gs_base = val,
+            "ds" => regs.ds = val,
+            "es" => regs.es = val,
+            "fs" => regs.fs = val,
+            "gs" => regs.gs = val,
+            _ => {
+                println!("not register {}", reg);
+                return;
+            }
+        };
+
+        // レジスタへ書き込み
+        self.write_regs(regs);
+    }
+
     /// レジスタ情報表示
     fn show_regs(&self) {
         let regs = self.read_regs();
@@ -372,6 +424,7 @@ impl Debugger {
         println!("c : continue program");
         println!("s : step-in");
         println!("info regs : show registers");
+        println!("set regs [register] [value]: write registers (ex set regs rax 0x1000)");
         println!("quit : quit program");
         println!("*************************************************************");
     }
