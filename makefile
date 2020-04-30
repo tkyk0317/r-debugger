@@ -1,5 +1,6 @@
 .PHONY: all
 all:
+	@cargo clippy
 	@cargo b
 	@cd sample && clang++ -g test.cpp main.cpp -o test
 	@cd ..
