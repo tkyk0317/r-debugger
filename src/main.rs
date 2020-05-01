@@ -22,7 +22,7 @@ fn main() {
     }
 
     let path = &args[2];
-    if false == Path::new(path).exists() {
+    if !Path::new(path).exists() {
         panic!("file not exist: {}", path);
     }
 

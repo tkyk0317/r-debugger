@@ -10,9 +10,9 @@ pub struct Tracer {
 /// strace実装
 impl Tracer {
     /// コンストラクタ
-    pub fn new(pid: Pid) -> Self {
+    pub fn new(target_pid: Pid) -> Self {
         Tracer {
-            pid: pid
+            pid: target_pid
         }
     }
 

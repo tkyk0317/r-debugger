@@ -42,14 +42,17 @@ impl MemoryMap {
                              .collect::<Vec<&str>>();
 
             // ファイル名をキーとして、HashMapへ登録
-            let mut key = "none".to_string();
-            if s_line.len() >= 6 {
-                key = s_line[5].to_string();
-            }
+            let key =
+                if s_line.len() >= 6 {
+                    s_line[5].to_string()
+                }
+                else {
+                    "none".to_string()
+                };
 
             // 開始アドレスやパーミッションを取り出す
             let map_info = self.maps.get_mut(&key);
-            let addr_range = s_line[0].split("-").collect::<Vec<&str>>();
+            let addr_range = s_line[0].split('-').collect::<Vec<&str>>();
             let new_map_info = MapInfo {
                 start_address: addr_range[0].to_string(),
                 end_address: addr_range[1].to_string(),

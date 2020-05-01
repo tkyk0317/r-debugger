@@ -33,14 +33,14 @@ impl BreakpointList {
     }
 
     /// ブレイクポイント登録
-    pub fn register(&mut self, sym: &String, addr: usize, inst: usize) -> bool {
+    pub fn register(&mut self, sym: &str, bp: usize, bp_inst: usize) -> bool {
         // 既に登録されている場合、登録しない
-        match self.breakpoints.iter().find(|b| b.addr == addr) {
+        match self.breakpoints.iter().find(|b| b.addr == bp) {
             Some(_) => false,
             None => {
                 // ブレイクポイント登録
                 self.breakpoints.push({
-                    Breakpoint { sym: sym.to_string(), addr: addr, inst: inst }
+                    Breakpoint { sym: sym.to_string(), addr: bp, inst: bp_inst }
                 });
                 true
             }
@@ -49,15 +49,12 @@ impl BreakpointList {
 
     /// アドレスが登録されているか
     pub fn has_addr(&self, addr: usize) -> bool {
-        match self.search(addr) {
-            Some(_) => true,
-            None => false
-        }
+        self.search(addr).is_some()
     }
 
     /// ブレイクポイントサーチ
     pub fn search(&self, addr: usize) -> Option<Breakpoint> {
-        self.breakpoints.iter().map(|b| b.clone()).find(|b| b.addr == addr)
+        self.breakpoints.iter().cloned().find(|b| b.addr == addr)
     }
 
     /// ブレイクポイント削除
@@ -71,7 +68,7 @@ impl BreakpointList {
         }
 
         // ブレイクポイント削除
-        Some(self.breakpoints.remove(index).clone())
+        Some(self.breakpoints.remove(index))
     }
 }
 
@@ -88,14 +85,14 @@ pub struct Debugger {
 /// デバッガ実装
 impl Debugger {
     /// コンストラクタ
-    pub fn new(pid: Pid, path: String) -> Self {
+    pub fn new(target_pid: Pid, path: String) -> Self {
         Debugger {
             path: path.clone(),
-            pid: pid,
+            pid: target_pid,
             entry: 0x0,
             breakpoint: BreakpointList::new(),
-            memory_map: MemoryMap::new(pid),
-            elf: Elf64::new(path.clone()),
+            memory_map: MemoryMap::new(target_pid),
+            elf: Elf64::new(path),
         }
     }
 
@@ -114,7 +111,7 @@ impl Debugger {
                 }
                 // シグナル受信による子プロセス停止
                 WaitStatus::Stopped(_pid, sig) => {
-                    if true == first_sig {
+                    if first_sig {
                         // シンボルロード（この段階でロードしないと子プロセスの情報が記載されていない）
                         // ※ execvコール後の一発目のシグナル
                         self.load_elf();
@@ -202,7 +199,7 @@ impl Debugger {
                                      .collect();
 
             // 空コマンドは無効
-            if coms.len() <= 0 { continue; }
+            if coms.is_empty() { continue; }
 
             // 各コマンドを実行
             match &*coms[0] {
@@ -236,7 +233,7 @@ impl Debugger {
     }
 
     /// シェルからのブレイクポイント設定
-    fn sh_breakpoint(&mut self, sym: &String) {
+    fn sh_breakpoint(&mut self, sym: &str) {
         // シンボル探索
         let symtbl = self.elf.search_sym(&sym);
         match symtbl {
@@ -251,7 +248,7 @@ impl Debugger {
     }
 
     /// シェルからのブレイクポイントリリース
-    fn sh_release_break(&mut self, no: &String) {
+    fn sh_release_break(&mut self, no: &str) {
         let ret = self.release_break(no.parse::<usize>().unwrap());
         if ret {
             println!("release Breakpoint({})", no);
@@ -267,7 +264,7 @@ impl Debugger {
     /// break point設定
     ///
     /// int 3命令を下位1バイトに埋め込み、ソフトウェア割り込みを発生させる
-    fn breakpoint(&mut self, addr: usize, sym: &String) {
+    fn breakpoint(&mut self, addr: usize, sym: &str) {
         // ブレイクポイント設定
         let address = self.to_abs_addr(addr);
 
@@ -304,7 +301,7 @@ impl Debugger {
     /// break point表示
     fn show_break(&self) {
         let bps = self.breakpoint.get();
-        if bps.len() == 0 {
+        if bps.is_empty() {
             println!("not entried breakpoint");
         }
         else {
