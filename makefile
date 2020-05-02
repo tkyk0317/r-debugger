@@ -15,6 +15,6 @@ dbg: all
 
 .PHONY: clean
 clean:
-	@cd sample && rm ./test
+	@cd sample && rm -rf ./test
 	@cargo clean
 

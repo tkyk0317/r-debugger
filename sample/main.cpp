@@ -7,12 +7,18 @@ extern void printTest();
 
 class Test {
 public:
-    Test() {}
-    ~Test() {}
+    Test(): num(0) {}
+    ~Test() {
+        cout << "destructor: 0x" << hex << num << endl;
+    }
 
     void test(int i) {
+        this->num++;
         cout << "test is " << i << endl;
     }
+
+private:
+    int num;
 };
 
 void test_func(int a) {
