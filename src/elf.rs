@@ -9,6 +9,9 @@ type Elf64Offset = u64;
 type Elf64Xword = u64;
 
 const IDENT_SIZE: usize = 16;
+const MASK_ST_TYPE: u8 = 0x0F;
+const MASK_ST_BIND: u8 = 0xF0;
+const SHIFT_ST_BIND: u8 = 0x04;
 
 // ELFヘッダー
 #[derive(Debug)]
@@ -140,16 +143,36 @@ impl ElfSecHeader {
     }
 }
 
+// シンボルbind
+#[derive(Debug,Clone,PartialEq)]
+enum StBind {
+    Unknown, // 初期値
+    Local,   // 0
+    Global,  // 1
+    Weak,    // 2
+}
+
+// シンボルType
+#[derive(Debug,Clone,PartialEq)]
+enum StType {
+    Unknown,  // 初期値
+    Notype,   // 0
+    Object,   // 1
+    Func,     // 2
+}
+
 // シンボルテーブル
 #[derive(Debug,Clone)]
 pub struct SymTbl {
-    pub st_name: Elf64Word,
-    pub st_info: u8,
-    pub st_other: u8,
-    pub st_shndx: Elf64Half,
+    st_name: Elf64Word,
+    st_info: u8,
+    st_other: u8,
+    st_shndx: Elf64Half,
     pub st_value: Elf64Addr,
-    pub st_size: Elf64Xword,
-    pub name: String, // strtabから読み取ったシンボル名（管理上の為、追加）
+    st_size: Elf64Xword,
+    st_rname: String, // strtabから読み取ったシンボル名（管理上の為、追加）
+    st_bind: StBind,  // st_infoの上位4bits
+    st_type: StType,  // st_infoの下位4bits
 }
 
 /// シンボルテーブル
@@ -163,7 +186,9 @@ impl SymTbl {
             st_shndx: 0,
             st_value: 0,
             st_size: 0,
-            name: "".to_string(),
+            st_rname: "".to_string(),
+            st_bind: StBind::Unknown,
+            st_type: StType::Unknown,
         }
     }
 }
@@ -206,9 +231,18 @@ impl Elf64 {
         self.load_symtab(&mut reader);
     }
 
-    /// シンボルサーチ
-    pub fn search_sym(&self, sym_name: &str) -> Option<&SymTbl> {
-        self.sym_tbl.iter().find(|sym| *sym_name == demangle(&sym.name))
+    /// Functionシンボルサーチ
+    pub fn search_func_sym(&self, sym_name: &str) -> Option<&SymTbl> {
+        self.sym_tbl.iter().find(|sym| {
+            *sym_name == demangle(&sym.st_rname) && sym.st_type == StType::Func
+        })
+    }
+
+    /// Variableシンボルサーチ
+    pub fn search_var_sym(&self, sym_name: &str) -> Option<&SymTbl> {
+        self.sym_tbl.iter().find(|sym| {
+            *sym_name == demangle(&sym.st_rname) && sym.st_type == StType::Object
+        })
     }
 
     /// ELFヘッダー読み込み
@@ -398,12 +432,16 @@ impl Elf64 {
             self.sym_tbl[i].st_name = offset;
 
             // 実際のシンボル名をstrtabセクションからリード
-            self.sym_tbl[i].name = self.to_string(&strtab_buf, offset as usize);
+            self.sym_tbl[i].st_rname = self.to_string(&strtab_buf, offset as usize);
 
             // st_info
             let mut c = [0; 1];
             reader.read_exact(&mut c).expect("cannot read symtbl");
             self.sym_tbl[i].st_info = u8::from_le_bytes(c);
+
+            // st_infoから各Bind・Typeを算出
+            self.sym_tbl[i].st_type = self.to_st_type(self.sym_tbl[i].st_info);
+            self.sym_tbl[i].st_bind = self.to_st_bind(self.sym_tbl[i].st_info);
 
             // st_other
             reader.read_exact(&mut c).expect("cannot read symtbl");
@@ -466,6 +504,26 @@ impl Elf64 {
             0x8000_0000 => ShType::LoUser,
             0x8FFF_FFFF => ShType::HiUser,
             _ => ShType::Unknown,
+        }
+    }
+
+    /// StType変換
+    fn to_st_type(&self, t: u8) -> StType {
+        match t & MASK_ST_TYPE {
+            0 => StType::Notype,
+            1 => StType::Object,
+            2 => StType::Func,
+            _ => StType::Unknown,
+        }
+    }
+
+    /// StBind変換
+    fn to_st_bind(&self, t: u8) -> StBind {
+        match (t & MASK_ST_BIND) >> SHIFT_ST_BIND {
+            0 => StBind::Local,
+            1 => StBind::Global,
+            2 => StBind::Weak,
+            _ => StBind::Unknown,
         }
     }
 

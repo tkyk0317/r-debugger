@@ -161,7 +161,7 @@ impl Debugger {
     fn recover_bp(&mut self, bp: usize) {
         // 命令を書き換える
         let bp_info = self.breakpoint.search(bp).unwrap();
-        write(self.pid, bp as AddressType, bp_info.inst as AddressType).expect("recover_bp is failed");
+        self.write_mem(bp, bp_info.inst);
 
         // ripを元にもどす
         let mut regs = self.read_regs();
@@ -207,6 +207,10 @@ impl Debugger {
                 "b" if coms.len() == 2 => self.sh_breakpoint(&coms[1]),
                 // ブレイクポイントリリース
                 "d" if coms.len() == 2 => self.sh_release_break(&coms[1]),
+                // シンボルリード
+                "p" if coms.len() == 2 => self.sh_read_sym(&coms[1]),
+                // シンボル書き込み
+                "set" if coms.len() == 4 && "var" == coms[1] => self.sh_write_sym(&coms[2], &coms[3]),
                 // 再開
                 "c" => {
                     self.cont();
@@ -235,8 +239,7 @@ impl Debugger {
     /// シェルからのブレイクポイント設定
     fn sh_breakpoint(&mut self, sym: &str) {
         // シンボル探索
-        let symtbl = self.elf.search_sym(&sym);
-        match symtbl {
+        match self.elf.search_func_sym(&sym) {
             Some(s) => {
                 // シンボル→アドレス変換したものをブレイクポイント設定
                 let addr = s.st_value;
@@ -255,6 +258,40 @@ impl Debugger {
         }
     }
 
+    /// シェルからのシンボルリード
+    fn sh_read_sym(&self, sym: &str) {
+        // シンボル探索
+        match self.elf.search_var_sym(&sym) {
+            Some(s) => {
+                // シンボルの内容を表示
+                let addr = self.to_abs_addr(s.st_value as usize);
+                println!("0x{:x}", self.read_mem(addr));
+            }
+            _ => println!("not found symbol: {}", sym)
+        };
+    }
+
+    /// シェルからのシンボル書き込み
+    fn sh_write_sym(&self, sym: &str, val: &str) {
+         let val = match usize::from_str_radix(val.trim_start_matches("0x"), 16) {
+            Ok(v) => v,
+            _ => {
+                println!("parse error: {}", val);
+                return;
+            }
+        };
+
+        // シンボル探索
+        match self.elf.search_var_sym(&sym) {
+            Some(s) => {
+                // シンボルの内容を書き換え
+                let addr = self.to_abs_addr(s.st_value as usize);
+                self.write_mem(addr, val);
+            }
+            _ => println!("not found symbol: {}", sym)
+        };
+    }
+
     /// シェルからのプログラム停止
     fn sh_quit(&self) {
         kill(self.pid).expect("cannot kill");
@@ -269,7 +306,7 @@ impl Debugger {
         let address = self.to_abs_addr(addr);
 
         // int 3命令を埋め込む
-        let inst = read(self.pid, address as AddressType).expect("ptrace::read failed");
+        let inst = self.read_mem(address);
         let int_code = (0xFFFF_FFFF_FFFF_FF00 & inst as u64) | 0xCC;
         write(self.pid, address as AddressType, int_code as AddressType).expect("ptrace::write failed");
 
@@ -412,17 +449,29 @@ impl Debugger {
         setregs(self.pid, regs).expect("write_regs is failed")
     }
 
+    /// メモリ読み込み
+    fn read_mem(&self, addr: usize) -> u64 {
+        read(self.pid, addr as AddressType).expect("ptrace::read is failed") as u64
+    }
+
+    /// メモリ書き込み
+    fn write_mem(&self, addr: usize, val: usize) {
+        write(self.pid, addr as AddressType, val as AddressType).expect("ptrace::write is failed");
+    }
+
     /// ヘルプ表示
     fn help(&self) {
         println!("******************************************************************************");
-        println!("b [symbol name]             : breakpoint at symbol (ex b main)");
-        println!("d [no]                      : delete breakpoint (ex b 1)");
-        println!("bl                          : show breakpoints");
-        println!("info regs                   : show registers");
-        println!("set regs [register] [value] : write registers (ex set regs rax 0x1000)");
-        println!("c                           : continue program");
-        println!("s                           : step-in");
-        println!("quit                        : quit program");
+        println!("b [symbol name]                 : breakpoint at symbol (ex b main)");
+        println!("d [no]                          : delete breakpoint (ex b 1)");
+        println!("bl                              : show breakpoints");
+        println!("info regs                       : show registers");
+        println!("c                               : continue program");
+        println!("s                               : step-in");
+        println!("p [symbol name]                 : show symbol variable (ex p global_variable)");
+        println!("set regs [register] [value]     : write registers (ex set regs rax 0x1000)");
+        println!("set var [variable name] [value] : write variable (ex set var g_var 0x1000)");
+        println!("quit                            : quit program");
         println!("******************************************************************************");
     }
 
