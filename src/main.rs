@@ -8,6 +8,7 @@ use nix::unistd::{fork, ForkResult, execv};
 mod debugger;
 mod stracer;
 mod memory_map;
+mod address;
 mod elf;
 use debugger::Debugger;
 use stracer::Tracer;

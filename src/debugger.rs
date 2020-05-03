@@ -5,13 +5,14 @@ use nix::sys::ptrace::{ cont, read, write, step, getregs, setregs, kill, Address
 
 use crate::elf::Elf64;
 use crate::memory_map::MemoryMap;
+use crate::address::Address;
 
 // ブレイクポイントリスト
 #[derive(Clone)]
 struct Breakpoint {
     sym: String,    // ブレイクポイントを貼るシンボル名
     inst: usize,    // ブレイクポイント箇所の命令列
-    addr: usize,    // シンボルテーブルに記載されているアドレス
+    addr: Address,  // シンボルテーブルに記載されているアドレス
 }
 
 // ブレイクポイント管理
@@ -32,9 +33,9 @@ impl BreakpointList {
     }
 
     /// ブレイクポイント登録
-    pub fn register(&mut self, sym: &str, bp: usize, bp_inst: usize) -> bool {
+    pub fn register(&mut self, sym: &str, bp: Address, bp_inst: usize) -> bool {
         // 既に登録されている場合、登録しない
-        match self.breakpoints.iter().find(|b| b.addr == bp) {
+        match self.breakpoints.iter().find(|b| b.addr.get() == bp.get()) {
             Some(_) => false,
             None => {
                 // ブレイクポイント登録
@@ -47,13 +48,13 @@ impl BreakpointList {
     }
 
     /// アドレスが登録されているか
-    pub fn has_addr(&self, addr: usize) -> bool {
+    pub fn has_addr(&self, addr: &Address) -> bool {
         self.search(addr).is_some()
     }
 
     /// ブレイクポイントサーチ
-    pub fn search(&self, addr: usize) -> Option<Breakpoint> {
-        self.breakpoints.iter().cloned().find(|b| b.addr == addr)
+    pub fn search(&self, addr: &Address) -> Option<Breakpoint> {
+        self.breakpoints.iter().cloned().find(|b| b.addr.get() == addr.get())
     }
 
     /// ブレイクポイント削除
@@ -147,10 +148,11 @@ impl Debugger {
         // トレースシグナルであれば処理
         if sig == nix::sys::signal::Signal::SIGTRAP {
             // ブレイクポイントで停止している場合、次の命令を指している
-            let bp = (self.read_regs().rip - 1) as usize;
-            if self.breakpoint.has_addr(bp) {
-                self.recover_bp(bp);
-                println!("break at 0x{:x}", bp);
+            let rip = (self.read_regs().rip - 1) as usize;
+            let bp = Address::new(0, rip); // 絶対アドレスなので、第一引数はゼロ
+            if self.breakpoint.has_addr(&bp) {
+                self.recover_bp(&bp);
+                println!("break at 0x{:x}", bp.get());
             }
 
             // シェルから入力を受け付ける
@@ -164,14 +166,16 @@ impl Debugger {
     /// 2. ripをブレイクポイントのアドレスへ再設定
     /// 3. 1step実行し、元の命令を処理
     /// 4. SIGTRAPを待ち、1で書き換えたブレイクポイントを貼る
-    fn recover_bp(&mut self, bp: usize) {
+    fn recover_bp(&mut self, rip_bp: &Address) {
         // 命令を書き換える
-        let bp_info = self.breakpoint.search(bp).unwrap();
-        self.write_mem(bp, bp_info.inst);
+        let bp_info = self.breakpoint.search(rip_bp).unwrap();
+
+        // 引数にripが指定されているので、baseアドレスはゼロ
+        self.write_mem(&rip_bp, bp_info.inst);
 
         // ripを元にもどす
         let mut regs = self.read_regs();
-        regs.rip = bp as u64;
+        regs.rip = rip_bp.get() as u64;
         self.write_regs(regs);
 
         // 1STEP実行（元の命令を実行）
@@ -182,7 +186,7 @@ impl Debugger {
             // ブレイクポイントの設定をもとにもどす
             WaitStatus::Stopped(_, _) => {
                 // 登録する際に、エントリーアドレス分を加算しているので、差し引く
-                self.breakpoint(self.to_sym_addr(bp_info.addr), &bp_info.sym);
+                self.breakpoint(self.to_sym_addr(bp_info.addr.get()), &bp_info.sym);
             }
             _ => panic!("recover_bp do not expect event")
         };
@@ -270,8 +274,8 @@ impl Debugger {
         match self.elf.search_var_sym(&sym) {
             Some(s) => {
                 // シンボルの内容を表示
-                let addr = self.to_abs_addr(s.st_value as usize);
-                println!("0x{:x}", self.read_mem(addr));
+                let addr = Address::new(self.entry, s.st_value as usize);
+                println!("0x{:x}", self.read_mem(&addr));
             }
             _ => println!("not found symbol: {}", sym)
         };
@@ -291,8 +295,8 @@ impl Debugger {
         match self.elf.search_var_sym(&sym) {
             Some(s) => {
                 // シンボルの内容を書き換え
-                let addr = self.to_abs_addr(s.st_value as usize);
-                self.write_mem(addr, val);
+                let addr = Address::new(self.entry, s.st_value as usize);
+                self.write_mem(&addr, val);
             }
             _ => println!("not found symbol: {}", sym)
         };
@@ -309,12 +313,12 @@ impl Debugger {
     /// int 3命令を下位1バイトに埋め込み、ソフトウェア割り込みを発生させる
     fn breakpoint(&mut self, addr: usize, sym: &str) {
         // ブレイクポイント設定
-        let address = self.to_abs_addr(addr);
+        let address = Address::new(self.entry, addr);
 
         // int 3命令を埋め込む
-        let inst = self.read_mem(address);
+        let inst = self.read_mem(&address);
         let int_code = (0xFFFF_FFFF_FFFF_FF00 & inst as u64) | 0xCC;
-        write(self.pid, address as AddressType, int_code as AddressType).expect("ptrace::write failed");
+        self.write_mem(&address, int_code as usize);
 
         // ブレイクポイント登録
         self.breakpoint.register(sym, address, inst as usize);
@@ -331,7 +335,7 @@ impl Debugger {
                 // 命令を元にもどす
                 write(
                     self.pid,
-                    bp.addr as AddressType,
+                    bp.addr.get() as AddressType,
                     bp.inst as AddressType
                 ).expect("ptrace::write failed");
 
@@ -349,7 +353,7 @@ impl Debugger {
         }
         else {
             for (i, b) in self.breakpoint.get().iter().enumerate() {
-                println!("{}: {} (0x{:016x})", i, b.sym, self.to_sym_addr(b.addr));
+                println!("{}: {} (0x{:016x})", i, b.sym, self.to_sym_addr(b.addr.get()));
             }
         }
     }
@@ -456,13 +460,13 @@ impl Debugger {
     }
 
     /// メモリ読み込み
-    fn read_mem(&self, addr: usize) -> u64 {
-        read(self.pid, addr as AddressType).expect("ptrace::read is failed") as u64
+    fn read_mem(&self, addr: &Address) -> u64 {
+        read(self.pid, addr.get() as AddressType).expect("ptrace::read is failed") as u64
     }
 
     /// メモリ書き込み
-    fn write_mem(&self, addr: usize, val: usize) {
-        write(self.pid, addr as AddressType, val as AddressType).expect("ptrace::write is failed");
+    fn write_mem(&self, addr: &Address, val: usize) {
+        write(self.pid, addr.get() as AddressType, val as AddressType).expect("ptrace::write is failed");
     }
 
     /// ヘルプ表示
@@ -479,13 +483,6 @@ impl Debugger {
         println!("set var [variable name] [value] : write variable (ex set var g_var 0x1000)");
         println!("quit                            : quit program");
         println!("******************************************************************************");
-    }
-
-    /// アドレス変換
-    ///
-    /// 入力されたアドレスを実際にシンボルがロードされているアドレスへ変換
-    fn to_abs_addr(&self, addr: usize) -> usize {
-        self.entry + addr
     }
 
     /// アドレス変換
