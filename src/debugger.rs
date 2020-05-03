@@ -5,23 +5,22 @@ use nix::sys::ptrace::{ cont, read, write, step, getregs, setregs, kill, Address
 
 use crate::elf::Elf64;
 use crate::memory_map::MemoryMap;
-use crate::address::Address;
+use crate::address::{AddressTrait, AdrFromRel, AdrFromAbs};
 
 // ブレイクポイントリスト
-#[derive(Clone)]
-struct Breakpoint {
+struct Breakpoint<'a> {
     sym: String,    // ブレイクポイントを貼るシンボル名
     inst: usize,    // ブレイクポイント箇所の命令列
-    addr: Address,  // シンボルテーブルに記載されているアドレス
+    addr: Box<dyn AddressTrait + 'a>,  // シンボルテーブルに記載されているアドレス
 }
 
 // ブレイクポイント管理
-struct BreakpointList {
-    breakpoints: Vec<Breakpoint>,
+struct BreakpointList<'a> {
+    breakpoints: Vec<Breakpoint<'a>>,
 }
 
 /// ブレイクポイント管理strcut実装
-impl BreakpointList {
+impl<'a> BreakpointList<'a> {
     /// コンストラクタ
     pub fn new() -> Self {
         BreakpointList { breakpoints: vec![] }
@@ -33,14 +32,14 @@ impl BreakpointList {
     }
 
     /// ブレイクポイント登録
-    pub fn register(&mut self, sym: &str, bp: Address, bp_inst: usize) -> bool {
+    pub fn register<T: 'a + AddressTrait>(&mut self, sym: &str, bp: T, bp_inst: usize) -> bool {
         // 既に登録されている場合、登録しない
         match self.breakpoints.iter().find(|b| b.addr.get() == bp.get()) {
             Some(_) => false,
             None => {
                 // ブレイクポイント登録
                 self.breakpoints.push({
-                    Breakpoint { sym: sym.to_string(), addr: bp, inst: bp_inst }
+                    Breakpoint { sym: sym.to_string(), addr: Box::new(bp), inst: bp_inst }
                 });
                 true
             }
@@ -48,13 +47,13 @@ impl BreakpointList {
     }
 
     /// アドレスが登録されているか
-    pub fn has_addr(&self, addr: &Address) -> bool {
+    pub fn has_addr<T: AddressTrait>(&self, addr: &T) -> bool {
         self.search(addr).is_some()
     }
 
     /// ブレイクポイントサーチ
-    pub fn search(&self, addr: &Address) -> Option<Breakpoint> {
-        self.breakpoints.iter().cloned().find(|b| b.addr.get() == addr.get())
+    pub fn search<T: AddressTrait>(&self, addr: &T) -> Option<&Breakpoint> {
+        self.breakpoints.iter().find(|b| b.addr.get() == addr.get())
     }
 
     /// ブレイクポイント削除
@@ -73,17 +72,17 @@ impl BreakpointList {
 }
 
 // デバッガ
-pub struct Debugger {
+pub struct Debugger<'a> {
     pid: Pid,
     path: String,
     entry: usize, // エントリーアドレス
-    breakpoint: BreakpointList,
+    breakpoint: BreakpointList<'a>,
     memory_map: MemoryMap,
     elf: Elf64,
 }
 
 /// デバッガ実装
-impl Debugger {
+impl<'a> Debugger<'a> {
     /// コンストラクタ
     pub fn new(target_pid: Pid, path: String) -> Self {
         Debugger {
@@ -149,7 +148,7 @@ impl Debugger {
         if sig == nix::sys::signal::Signal::SIGTRAP {
             // ブレイクポイントで停止している場合、次の命令を指している
             let rip = (self.read_regs().rip - 1) as usize;
-            let bp = Address::new(0, rip); // 絶対アドレスなので、第一引数はゼロ
+            let bp = AdrFromAbs::new(rip);
             if self.breakpoint.has_addr(&bp) {
                 self.recover_bp(&bp);
                 println!("break at 0x{:x}", bp.get());
@@ -166,12 +165,12 @@ impl Debugger {
     /// 2. ripをブレイクポイントのアドレスへ再設定
     /// 3. 1step実行し、元の命令を処理
     /// 4. SIGTRAPを待ち、1で書き換えたブレイクポイントを貼る
-    fn recover_bp(&mut self, rip_bp: &Address) {
+    fn recover_bp<T: AddressTrait>(&mut self, rip_bp: &T) {
         // 命令を書き換える
         let bp_info = self.breakpoint.search(rip_bp).unwrap();
 
         // 引数にripが指定されているので、baseアドレスはゼロ
-        self.write_mem(&rip_bp, bp_info.inst);
+        self.write_mem(rip_bp, bp_info.inst);
 
         // ripを元にもどす
         let mut regs = self.read_regs();
@@ -186,7 +185,9 @@ impl Debugger {
             // ブレイクポイントの設定をもとにもどす
             WaitStatus::Stopped(_, _) => {
                 // 登録する際に、エントリーアドレス分を加算しているので、差し引く
-                self.breakpoint(self.to_sym_addr(bp_info.addr.get()), &bp_info.sym);
+                let addr = bp_info.addr.get();
+                let sym = bp_info.sym.clone();
+                self.breakpoint(self.to_sym_addr(addr), &sym);
             }
             _ => panic!("recover_bp do not expect event")
         };
@@ -274,7 +275,7 @@ impl Debugger {
         match self.elf.search_var_sym(&sym) {
             Some(s) => {
                 // シンボルの内容を表示
-                let addr = Address::new(self.entry, s.st_value as usize);
+                let addr = AdrFromRel::new(self.entry, s.st_value as usize);
                 println!("0x{:x}", self.read_mem(&addr));
             }
             _ => println!("not found symbol: {}", sym)
@@ -295,7 +296,7 @@ impl Debugger {
         match self.elf.search_var_sym(&sym) {
             Some(s) => {
                 // シンボルの内容を書き換え
-                let addr = Address::new(self.entry, s.st_value as usize);
+                let addr = AdrFromRel::new(self.entry, s.st_value as usize);
                 self.write_mem(&addr, val);
             }
             _ => println!("not found symbol: {}", sym)
@@ -313,7 +314,7 @@ impl Debugger {
     /// int 3命令を下位1バイトに埋め込み、ソフトウェア割り込みを発生させる
     fn breakpoint(&mut self, addr: usize, sym: &str) {
         // ブレイクポイント設定
-        let address = Address::new(self.entry, addr);
+        let address = AdrFromRel::new(self.entry, addr);
 
         // int 3命令を埋め込む
         let inst = self.read_mem(&address);
@@ -460,12 +461,12 @@ impl Debugger {
     }
 
     /// メモリ読み込み
-    fn read_mem(&self, addr: &Address) -> u64 {
+    fn read_mem<T: AddressTrait>(&self, addr: &T) -> u64 {
         read(self.pid, addr.get() as AddressType).expect("ptrace::read is failed") as u64
     }
 
     /// メモリ書き込み
-    fn write_mem(&self, addr: &Address, val: usize) {
+    fn write_mem<T: AddressTrait>(&self, addr: &T, val: usize) {
         write(self.pid, addr.get() as AddressType, val as AddressType).expect("ptrace::write is failed");
     }
 
