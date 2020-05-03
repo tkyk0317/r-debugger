@@ -113,8 +113,9 @@ impl<'a> Debugger<'a> {
                     if first_sig {
                         // シンボルロード（この段階でロードしないと子プロセスの情報が記載されていない）
                         // ※ execvコール後の一発目のシグナル
-                        if self.load_elf().is_err() {
-                             panic!("cannot parset ELF");
+                        if let Err(err) = self.load_elf() {
+                            println!("cannot parset ELF: {:?}", err);
+                            self.sh_quit();
                         }
                     }
                     self.stopped_handler(sig);
