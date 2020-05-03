@@ -98,7 +98,8 @@ struct ElfSecHeader {
     sh_info: Elf64Word,
     sh_addralign: Elf64Xword,
     sh_entsize: Elf64Xword,
-    no: Elf64Half, // セクション番号（管理のため追加）
+    sh_no: Elf64Half, // セクション番号（管理のため追加）
+    sh_rname: String, // セクション名
 }
 
 // SH Type
@@ -138,7 +139,8 @@ impl ElfSecHeader {
             sh_info: 0,
             sh_addralign: 0,
             sh_entsize: 0,
-            no: 0,
+            sh_no: 0,
+            sh_rname: "".to_string(),
         }
     }
 }
@@ -404,7 +406,15 @@ impl Elf64 {
 
             // セクション番号としてインデックスを設定
             // ※ セクション番号はセクションの並び順序と等しい
-            self.sec_header[i as usize].no = i;
+            self.sec_header[i as usize].sh_no = i;
+        }
+
+        // セクション名を埋める
+        let strtab_buf = self.read_strtab_of_sec(reader)?;
+        for i in 0..self.header.e_shnum {
+            // 実際のセクション名をstrtabセクションからリード
+            let offset = self.sec_header[i as usize].sh_name as usize;
+            self.sec_header[i as usize].sh_rname = self.to_string(&strtab_buf, offset);
         }
 
         Ok(())
@@ -479,7 +489,28 @@ impl Elf64 {
         let strtab = match
             self.sec_header
                 .iter()
-                .filter(|s| self.to_shtype(s.sh_type) == ShType::StrTab && s.no != self.header.e_shstrndx)
+                .filter(|s| self.to_shtype(s.sh_type) == ShType::StrTab && s.sh_no != self.header.e_shstrndx)
+                .collect::<Vec<&ElfSecHeader>>()
+                .pop() {
+            Some(header) => header,
+            _ => return Err(Error::new(ErrorKind::NotFound, "Not found strtab"))
+        };
+
+        // strtab情報をリード
+        reader.seek(SeekFrom::Start(strtab.sh_offset))?;
+        let mut buf: Vec<u8> = vec![0; strtab.sh_size as usize];
+        reader.read_exact(&mut buf)?;
+
+        Ok(buf)
+    }
+
+    /// strtabセクションデータリード（for section name）
+    fn read_strtab_of_sec(&self, reader: &mut BufReader<File>) -> Result<Vec<u8>> {
+        // .strtabセクションをサーチ(shstrtab)
+        let strtab = match
+            self.sec_header
+                .iter()
+                .filter(|s| self.to_shtype(s.sh_type) == ShType::StrTab && s.sh_no == self.header.e_shstrndx)
                 .collect::<Vec<&ElfSecHeader>>()
                 .pop() {
             Some(header) => header,
