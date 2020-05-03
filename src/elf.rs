@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, BufReader, SeekFrom, Seek};
+use std::io::{Read, BufReader, SeekFrom, Seek, Result, Error, ErrorKind};
 use symbolic_demangle::{ demangle };
 
 type Elf64Half = u16;
@@ -216,19 +216,23 @@ impl Elf64 {
     }
 
     /// ELFデータロード
-    pub fn load(&mut self) {
+    pub fn load(&mut self) -> Result<()> {
+
         // ELFヘッダーロード
-        let mut reader = BufReader::new(File::open(&self.path).expect("not found file"));
-        self.load_elf_header(&mut reader);
+        let f = File::open(&self.path)?;
+        let mut reader = BufReader::new(f);
+        self.load_elf_header(&mut reader)?;
 
         // プログラムヘッダーロード
-        self.load_prog_header(&mut reader);
+        self.load_prog_header(&mut reader)?;
 
         // セクションヘッダーロード
-        self.load_sec_header(&mut reader);
+        self.load_sec_header(&mut reader)?;
 
         // シンボルテーブルロード
-        self.load_symtab(&mut reader);
+        self.load_symtab(&mut reader)?;
+
+        Ok(())
     }
 
     /// Functionシンボルサーチ
@@ -246,166 +250,170 @@ impl Elf64 {
     }
 
     /// ELFヘッダー読み込み
-    fn load_elf_header(&mut self, reader: &mut BufReader<File>) {
+    fn load_elf_header(&mut self, reader: &mut BufReader<File>) -> Result<()> {
         // e_ident
-        reader.read_exact(&mut self.header.e_ident).expect("cannot read elf data");
+        reader.read_exact(&mut self.header.e_ident)?;
 
         // e_type
         let mut half_word = [0; 2];
-        reader.read_exact(&mut half_word).expect("cannot read elf data");
-        self.header.e_type = u16::from_le_bytes(half_word);
+        reader.read_exact(&mut half_word)?;
 
         // e_machine
-        reader.read_exact(&mut half_word).expect("cannot read elf data");
+        reader.read_exact(&mut half_word)?;
         self.header.e_machine = u16::from_le_bytes(half_word);
 
         // e_version
         let mut word = [0; 4];
-        reader.read_exact(&mut word).expect("cannot read elf data");
+        reader.read_exact(&mut word)?;
         self.header.e_version = u32::from_le_bytes(word);
 
         // e_entry
         let mut word64 = [0; 8];
-        reader.read_exact(&mut word64).expect("cannot read elf data");
+        reader.read_exact(&mut word64)?;
         self.header.e_entry = u64::from_le_bytes(word64);
 
         // e_phoff
-        reader.read_exact(&mut word64).expect("cannot read elf data");
+        reader.read_exact(&mut word64)?;
         self.header.e_phoff = u64::from_le_bytes(word64);
 
         // e_shoff
-        reader.read_exact(&mut word64).expect("cannot read elf data");
+        reader.read_exact(&mut word64)?;
         self.header.e_shoff = u64::from_le_bytes(word64);
 
         // e_flags
-        reader.read_exact(&mut word).expect("cannot read elf data");
+        reader.read_exact(&mut word)?;
         self.header.e_flags = u32::from_le_bytes(word);
 
         // e_ehsize
-        reader.read_exact(&mut half_word).expect("cannot read elf data");
+        reader.read_exact(&mut half_word)?;
         self.header.e_ehsize = u16::from_le_bytes(half_word);
 
         // e_phentsize
-        reader.read_exact(&mut half_word).expect("cannot read elf data");
+        reader.read_exact(&mut half_word)?;
         self.header.e_phentsize = u16::from_le_bytes(half_word);
 
         // e_phnum
-        reader.read_exact(&mut half_word).expect("cannot read elf data");
+        reader.read_exact(&mut half_word)?;
         self.header.e_phnum = u16::from_le_bytes(half_word);
 
         // e_shentsize
-        reader.read_exact(&mut half_word).expect("cannot read elf data");
+        reader.read_exact(&mut half_word)?;
         self.header.e_shentsize = u16::from_le_bytes(half_word);
 
         // e_shnum
-        reader.read_exact(&mut half_word).expect("cannot read elf data");
+        reader.read_exact(&mut half_word)?;
         self.header.e_shnum = u16::from_le_bytes(half_word);
 
         // e_shstrndx
-        reader.read_exact(&mut half_word).expect("cannot read elf data");
+        reader.read_exact(&mut half_word)?;
         self.header.e_shstrndx = u16::from_le_bytes(half_word);
 
         // プログラムヘッダー、セクションヘッダー数が判明したので、リサイズ
         self.prog_header.resize(self.header.e_phnum as usize, ElfProgHeader::new());
         self.sec_header.resize(self.header.e_shnum as usize, ElfSecHeader::new());
+
+        Ok(())
     }
 
     /// プログラムヘッダーロード
-    fn load_prog_header(&mut self, reader: &mut BufReader<File>) {
+    fn load_prog_header(&mut self, reader: &mut BufReader<File>) -> Result<()> {
         // プログラムヘッダー位置へSeek
-        reader.seek(SeekFrom::Start(self.header.e_phoff)).expect("[load_prog_header] seek error");
+        reader.seek(SeekFrom::Start(self.header.e_phoff))?;
 
         for i in 0..self.header.e_phnum {
             // p_type
             let mut word = [0; 4];
-            reader.read_exact(&mut word).expect("cannot read prog sec header");
+            reader.read_exact(&mut word)?;
             self.prog_header[i as usize].p_type = u32::from_le_bytes(word);
 
             // p_flags
-            reader.read_exact(&mut word).expect("cannot read elf prog header");
+            reader.read_exact(&mut word)?;
             self.prog_header[i as usize].p_flags = u32::from_le_bytes(word);
 
             // p_flags
             let mut word64 = [0; 8];
-            reader.read_exact(&mut word64).expect("cannot read elf prog header");
+            reader.read_exact(&mut word64)?;
             self.prog_header[i as usize].p_offset = u64::from_le_bytes(word64);
 
             // p_vaddr
-            reader.read_exact(&mut word64).expect("cannot read elf prog header");
+            reader.read_exact(&mut word64)?;
             self.prog_header[i as usize].p_vaddr = u64::from_le_bytes(word64);
 
             // p_paddr
-            reader.read_exact(&mut word64).expect("cannot read elf prog header");
+            reader.read_exact(&mut word64)?;
             self.prog_header[i as usize].p_paddr = u64::from_le_bytes(word64);
 
             // p_memsz
-            reader.read_exact(&mut word64).expect("cannot read elf prog header");
+            reader.read_exact(&mut word64)?;
             self.prog_header[i as usize].p_memsz = u64::from_le_bytes(word64);
 
             // p_align
-            reader.read_exact(&mut word64).expect("cannot read elf prog header");
+            reader.read_exact(&mut word64)?;
             self.prog_header[i as usize].p_align = u64::from_le_bytes(word64);
         }
+        Ok(())
     }
 
     /// セクションヘッダーロード
-    fn load_sec_header(&mut self, reader: &mut BufReader<File>) {
+    fn load_sec_header(&mut self, reader: &mut BufReader<File>) -> Result<()> {
         // セクションヘッダー位置へSeek
-        reader.seek(SeekFrom::Start(self.header.e_shoff)).expect("[load_sec_header] seek error");
+        reader.seek(SeekFrom::Start(self.header.e_shoff))?;
 
         for i in 0..self.header.e_shnum {
             // sh_name
             let mut word = [0; 4];
-            reader.read_exact(&mut word).expect("cannot read elf sec header");
+            reader.read_exact(&mut word)?;
             self.sec_header[i as usize].sh_name = u32::from_le_bytes(word);
 
             // sh_type
-            reader.read_exact(&mut word).expect("cannot read elf sec header");
+            reader.read_exact(&mut word)?;
             self.sec_header[i as usize].sh_type = u32::from_le_bytes(word);
 
             // sh_flags
             let mut word64 = [0; 8];
-            reader.read_exact(&mut word64).expect("cannot read elf sec header");
+            reader.read_exact(&mut word64)?;
             self.sec_header[i as usize].sh_flags = u64::from_le_bytes(word64);
 
             // sh_addr
-            reader.read_exact(&mut word64).expect("cannot read elf sec header");
+            reader.read_exact(&mut word64)?;
             self.sec_header[i as usize].sh_addr = u64::from_le_bytes(word64);
 
             // sh_offset
-            reader.read_exact(&mut word64).expect("cannot read elf sec header");
+            reader.read_exact(&mut word64)?;
             self.sec_header[i as usize].sh_offset = u64::from_le_bytes(word64);
 
             // sh_size
-            reader.read_exact(&mut word64).expect("cannot read elf sec header");
+            reader.read_exact(&mut word64)?;
             self.sec_header[i as usize].sh_size = u64::from_le_bytes(word64);
 
             // sh_link
-            reader.read_exact(&mut word).expect("cannot read elf sec header");
+            reader.read_exact(&mut word)?;
             self.sec_header[i as usize].sh_link = u32::from_le_bytes(word);
 
             // sh_info
-            reader.read_exact(&mut word).expect("cannot read elf sec header");
+            reader.read_exact(&mut word)?;
             self.sec_header[i as usize].sh_info = u32::from_le_bytes(word);
 
             // sh_addralign
-            reader.read_exact(&mut word64).expect("cannot read elf sec header");
+            reader.read_exact(&mut word64)?;
             self.sec_header[i as usize].sh_addralign= u64::from_le_bytes(word64);
 
             // sh_entsize
-            reader.read_exact(&mut word64).expect("cannot read elf sec header");
+            reader.read_exact(&mut word64)?;
             self.sec_header[i as usize].sh_entsize = u64::from_le_bytes(word64);
 
             // セクション番号としてインデックスを設定
             // ※ セクション番号はセクションの並び順序と等しい
             self.sec_header[i as usize].no = i;
         }
+
+        Ok(())
     }
 
     /// シンボルテーブルロード
-    fn load_symtab(&mut self, reader: &mut BufReader<File>) {
+    fn load_symtab(&mut self, reader: &mut BufReader<File>) -> Result<()> {
         // strtab情報をリード(Seekされているので注意)
-        let strtab_buf = self.read_strtab(reader);
+        let strtab_buf = self.read_strtab(reader)?;
 
         // symtab位置までSeek
         let symtab = match
@@ -415,9 +423,9 @@ impl Elf64 {
                 .collect::<Vec<&ElfSecHeader>>()
                 .pop() {
             Some(header) => header,
-            _ => panic!("[load_symtab] not found shmtab section")
+            _ => return Err(Error::new(ErrorKind::NotFound, "Not found symtab"))
         };
-        reader.seek(SeekFrom::Start(symtab.sh_offset)).expect("[load_symtab] seek error");
+        reader.seek(SeekFrom::Start(symtab.sh_offset))?;
 
         // sym_tblリサイズ
         let count = (symtab.sh_size / symtab.sh_entsize) as usize;
@@ -427,7 +435,7 @@ impl Elf64 {
         for i in 0..count {
             // st_name
             let mut word = [0; 4];
-            reader.read_exact(&mut word).expect("cannot read symtbl");
+            reader.read_exact(&mut word)?;
             let offset = u32::from_le_bytes(word);
             self.sym_tbl[i].st_name = offset;
 
@@ -436,7 +444,7 @@ impl Elf64 {
 
             // st_info
             let mut c = [0; 1];
-            reader.read_exact(&mut c).expect("cannot read symtbl");
+            reader.read_exact(&mut c)?;
             self.sym_tbl[i].st_info = u8::from_le_bytes(c);
 
             // st_infoから各Bind・Typeを算出
@@ -444,27 +452,29 @@ impl Elf64 {
             self.sym_tbl[i].st_bind = self.to_st_bind(self.sym_tbl[i].st_info);
 
             // st_other
-            reader.read_exact(&mut c).expect("cannot read symtbl");
+            reader.read_exact(&mut c)?;
             self.sym_tbl[i].st_other = u8::from_le_bytes(c);
 
             // st_shndx
             let mut half_word = [0; 2];
-            reader.read_exact(&mut half_word).expect("cannot read symtbl");
+            reader.read_exact(&mut half_word)?;
             self.sym_tbl[i].st_shndx = u16::from_le_bytes(half_word);
 
             // st_value
             let mut word64 = [0; 8];
-            reader.read_exact(&mut word64).expect("cannot read symtbl");
+            reader.read_exact(&mut word64)?;
             self.sym_tbl[i].st_value = u64::from_le_bytes(word64);
 
             // st_size
-            reader.read_exact(&mut word64).expect("cannot read symtbl");
+            reader.read_exact(&mut word64)?;
             self.sym_tbl[i].st_size = u64::from_le_bytes(word64);
         }
+
+        Ok(())
     }
 
     /// strtabセクションデータリード
-    fn read_strtab(&self, reader: &mut BufReader<File>) -> Vec<u8> {
+    fn read_strtab(&self, reader: &mut BufReader<File>) -> Result<Vec<u8>> {
         // .strtabセクションをサーチ(shstrtabは除外する)
         let strtab = match
             self.sec_header
@@ -473,15 +483,15 @@ impl Elf64 {
                 .collect::<Vec<&ElfSecHeader>>()
                 .pop() {
             Some(header) => header,
-            _ => panic!("[read_strtab] not found strtab section")
+            _ => return Err(Error::new(ErrorKind::NotFound, "Not found strtab"))
         };
 
         // strtab情報をリード
-        reader.seek(SeekFrom::Start(strtab.sh_offset)).expect("[read_strtab] seek error");
+        reader.seek(SeekFrom::Start(strtab.sh_offset))?;
         let mut buf: Vec<u8> = vec![0; strtab.sh_size as usize];
-        reader.read_exact(&mut buf).expect("cannot read strtab");
+        reader.read_exact(&mut buf)?;
 
-        buf
+        Ok(buf)
     }
 
     /// SH_TYPE変換

@@ -1,11 +1,10 @@
-use std::io::{self, Write};
+use std::io::{self, Write, Result};
 use nix::unistd::{ Pid };
 use nix::sys::wait::*;
 use nix::sys::ptrace::{ cont, read, write, step, getregs, setregs, kill, AddressType };
 
 use crate::elf::Elf64;
 use crate::memory_map::MemoryMap;
-
 
 // ブレイクポイントリスト
 #[derive(Clone)]
@@ -114,7 +113,9 @@ impl Debugger {
                     if first_sig {
                         // シンボルロード（この段階でロードしないと子プロセスの情報が記載されていない）
                         // ※ execvコール後の一発目のシグナル
-                        self.load_elf();
+                        if self.load_elf().is_err() {
+                             panic!("cannot parset ELF");
+                        }
                     }
                     self.stopped_handler(sig);
                 }
@@ -130,10 +131,15 @@ impl Debugger {
     }
 
     /// ELFファイルロード
-    fn load_elf(&mut self) {
+    fn load_elf(&mut self) -> Result<()> {
+        // 対象プログラムのロード先先頭アドレスを取得
         let map_info = self.memory_map.load();
-        self.entry = usize::from_str_radix(&map_info.get(&self.path).unwrap()[0].start_address, 16).unwrap();
-        self.elf.load();
+        self.entry = usize::from_str_radix(
+            &map_info.get(&self.path).expect("can not read entry address")[0].start_address, 16
+        ).expect("can not parse entry ddress");
+
+        // ELFファイルロード
+        self.elf.load()
     }
 
     /// WaitStatus::Stoppedハンドラ
