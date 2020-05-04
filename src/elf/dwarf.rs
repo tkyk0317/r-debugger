@@ -65,7 +65,7 @@ impl Dwarf {
     }
 
     /// debug_infoロード
-    pub fn load(&mut self, path: &str, header: &Vec<ElfSecHeader>) -> Result<()> {
+    pub fn load(&mut self, path: &str, header: &[ElfSecHeader]) -> Result<()> {
         // debug_infoセクションを探す
         let debug_info_sec = match self.search_debug_info_sec(&header) {
             Some(h) => h,
@@ -81,7 +81,7 @@ impl Dwarf {
     }
 
     /// search debug_info section
-    fn search_debug_info_sec<'a>(&self, header: &'a Vec<ElfSecHeader>) -> Option<&'a ElfSecHeader> {
+    fn search_debug_info_sec<'a>(&self, header: &'a [ElfSecHeader]) -> Option<&'a ElfSecHeader> {
         header.iter().find(|s| s.get_name() == ".debug_info")
     }
 
@@ -96,7 +96,7 @@ impl Dwarf {
         self.debug_info.header.len = u32::from_le_bytes(word);
 
         // load actual len when 64bit mode
-        if self.debug_info.header.len == 0xFFFFFFFF { // 64bit mode
+        if self.debug_info.header.len == 0xFFFF_FFFF { // 64bit mode
             let mut word64 = [0; 8];
             reader.read_exact(&mut word64)?;
             self.debug_info.header.actual_len = u64::from_le_bytes(word64);
