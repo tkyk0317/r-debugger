@@ -9,8 +9,8 @@ struct DebugInfoHeader {
     len: u32,            // debug_info length(for 32bit dwarf format. 0xFFFF_FFFF when 64bit dwarf mode)
     actual_len: u64,     // debug_info length(for 64bit mode)
     version: u16,        // dwarf version
-    abb_rev_offset: u32, // debug_abbrev section offset
-    address_size: u8,    // 1-byte unsigned integer representing the size in bytes of an address on the target architecture
+    abb_rev_offset: u32, // debug_abbrev section offset in .debug_abbrev
+    address_size: u8,    // 1-byte unsigned integer representing the size in bytes of an address on the target architecture(pointer size)
 }
 
 impl DebugInfoHeader {

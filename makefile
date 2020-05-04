@@ -18,3 +18,6 @@ clean:
 	@cd sample && rm -rf ./test
 	@cargo clean
 
+.PHONY: test
+test:
+	@cargo test
