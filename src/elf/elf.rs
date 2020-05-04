@@ -2,6 +2,8 @@ use std::fs::File;
 use std::io::{Read, BufReader, SeekFrom, Seek, Result, Error, ErrorKind};
 use symbolic_demangle::{ demangle };
 
+use super::dwarf::Dwarf;
+
 type Elf64Half = u16;
 type Elf64Word = u32;
 type Elf64Addr = u64;
@@ -87,7 +89,7 @@ impl ElfProgHeader {
 
 // ELFセクションヘッダー
 #[derive(Debug,Clone)]
-struct ElfSecHeader {
+pub struct ElfSecHeader {
     sh_name: Elf64Word,
     sh_type: Elf64Word,
     sh_flags: Elf64Xword,
@@ -100,6 +102,13 @@ struct ElfSecHeader {
     sh_entsize: Elf64Xword,
     sh_no: Elf64Half, // セクション番号（管理のため追加）
     sh_rname: String, // セクション名
+}
+
+impl ElfSecHeader {
+    /// セクション名取得
+    pub fn get_name(&self) -> &str { &self.sh_rname }
+    /// セクションオフセット取得
+    pub fn get_offset(&self) -> Elf64Offset { self.sh_offset }
 }
 
 // SH Type
@@ -202,6 +211,7 @@ pub struct Elf64 {
     prog_header: Vec<ElfProgHeader>,
     sec_header: Vec<ElfSecHeader>,
     sym_tbl: Vec<SymTbl>,
+    dwarf: Dwarf,
 }
 
 /// ELF解析
@@ -214,6 +224,7 @@ impl Elf64 {
             prog_header: vec![],
             sec_header: vec![],
             sym_tbl: vec![],
+            dwarf: Dwarf::new(),
         }
     }
 
@@ -233,6 +244,9 @@ impl Elf64 {
 
         // シンボルテーブルロード
         self.load_symtab(&mut reader)?;
+
+        // dwarf情報読み込み
+        self.dwarf.load(&self.path, &self.sec_header)?;
 
         Ok(())
     }
