@@ -6,7 +6,7 @@ pub enum LEB128Error {
     DecodeError
 }
 
-trait ULEB128 {
+pub trait ULEB128 {
     /// LEBデータRead
     fn decode<R: std::io::Read>(reader: &mut R) -> Result<u64, LEB128Error> {
         // 終了判定であるMSB=0まで、続ける
@@ -20,7 +20,7 @@ trait ULEB128 {
 
             // LEBデータを取得・復元
             let b_val = u8::from_le_bytes(b) as u64;
-            val |= (b_val & 0x7F) << s * 7;
+            val |= (b_val & 0x7F) << s;
 
             // MSG=0であれば、終了
             if 0 == b_val & 0x80 {
@@ -28,7 +28,7 @@ trait ULEB128 {
             }
 
             // 次回のシフト量を更新
-            s += 1;
+            s += 7;
         }
         Ok(val)
     }

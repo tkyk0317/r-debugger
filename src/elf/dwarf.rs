@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{Read, BufReader, Seek, SeekFrom, Result, Error, ErrorKind};
 
 use crate::elf::elf::ElfSecHeader;
+use crate::elf::leb128::ULEB128;
 
 /// debug_info header(32bit mode)
 #[derive(Debug)]
@@ -56,6 +57,7 @@ pub struct Dwarf {
     debug_info: DebugInfoSec,
 }
 
+impl ULEB128 for Dwarf {}
 impl Dwarf {
     /// コンストラクタ
     pub fn new() -> Self {
@@ -119,3 +121,4 @@ impl Dwarf {
         Ok(())
     }
 }
+
