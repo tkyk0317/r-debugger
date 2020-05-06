@@ -8,9 +8,12 @@ pub enum LEB128Error {
 
 pub trait ULEB128 {
     /// LEBデータRead
-    fn decode<R: std::io::Read>(reader: &mut R) -> Result<u64, LEB128Error> {
+    ///
+    /// 読み取ったサイズとvalueをタプルで返す
+    fn decode<R: std::io::Read>(reader: &mut R) -> Result<(u64, u64), LEB128Error> {
         // 終了判定であるMSB=0まで、続ける
         let mut val: u64 = 0;
+        let mut size = 0;
         let mut s = 0;
         loop {
             let mut b = [0; 1];
@@ -21,6 +24,7 @@ pub trait ULEB128 {
             // LEBデータを取得・復元
             let b_val = u8::from_le_bytes(b) as u64;
             val |= (b_val & 0x7F) << s;
+            size += 1;
 
             // MSG=0であれば、終了
             if 0 == b_val & 0x80 {
@@ -30,7 +34,7 @@ pub trait ULEB128 {
             // 次回のシフト量を更新
             s += 7;
         }
-        Ok(val)
+        Ok((size, val))
     }
 }
 

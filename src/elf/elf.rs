@@ -109,6 +109,8 @@ impl ElfSecHeader {
     pub fn get_name(&self) -> &str { &self.sh_rname }
     /// セクションオフセット取得
     pub fn get_offset(&self) -> Elf64Offset { self.sh_offset }
+    /// サイズ取得
+    pub fn get_size(&self) -> Elf64Xword { self.sh_size }
 }
 
 // SH Type
