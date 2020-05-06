@@ -47,19 +47,35 @@ mod test {
 
     #[test]
     fn test() {
-        let mut b: &[u8] = &[0];
-        assert_eq!(0, Test::decode(&mut b).unwrap());
-
-        b = &[1];
-        assert_eq!(1, Test::decode(&mut b).unwrap());
-
-        b = &[0xE5, 0x8E, 0x26];
-        assert_eq!(624485, Test::decode(&mut b).unwrap());
-
-        b = &[0x7F];
-        assert_eq!(127, Test::decode(&mut b).unwrap());
-
-        b = &[0xEA, 0x93, 0x21];
-        assert_eq!(543210, Test::decode(&mut b).unwrap());
+        {
+            let mut b: &[u8] = &[0];
+            let ret = Test::decode(&mut b).unwrap();
+            assert_eq!(1, ret.0);
+            assert_eq!(0, ret.1);
+        }
+        {
+            let mut b: &[u8] = &[1];
+            let ret = Test::decode(&mut b).unwrap();
+            assert_eq!(1, ret.0);
+            assert_eq!(1, ret.1);
+        }
+        {
+            let mut b: &[u8] = &[0xE5, 0x8E, 0x26];
+            let ret = Test::decode(&mut b).unwrap();
+            assert_eq!(3, ret.0);
+            assert_eq!(624485, ret.1);
+        }
+        {
+            let mut b: &[u8] = &[0x7F];
+            let ret = Test::decode(&mut b).unwrap();
+            assert_eq!(1, ret.0);
+            assert_eq!(127, ret.1);
+        }
+        {
+            let mut b: &[u8] = &[0xEA, 0x93, 0x21];
+            let ret = Test::decode(&mut b).unwrap();
+            assert_eq!(3, ret.0);
+            assert_eq!(543210, ret.1);
+        }
     }
 }
