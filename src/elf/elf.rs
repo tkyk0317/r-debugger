@@ -230,9 +230,13 @@ impl Elf64 {
         }
     }
 
+    /// debugセクション情表示
+    pub fn show_debug(&self) {
+        self.dwarf.show();
+    }
+
     /// ELFデータロード
     pub fn load(&mut self) -> Result<()> {
-
         // ELFヘッダーロード
         let f = File::open(&self.path)?;
         let mut reader = BufReader::new(f);

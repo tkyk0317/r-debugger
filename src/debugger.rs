@@ -239,6 +239,8 @@ impl<'a> Debugger<'a> {
                 "bl" => self.show_break(),
                 // レジスタ表示
                 "info" if coms.len() == 2 && "regs" == coms[1] => self.show_regs(),
+                // debugセクション情報表示
+                "info" if coms.len() == 2 && "debugsec" == coms[1] =>self.elf.show_debug(),
                 // レジスタ書き込み
                 "set" if coms.len() == 4 && "regs" == coms[1] => self.set_regs(&coms[2], &coms[3]),
                 // 終了
@@ -478,6 +480,7 @@ impl<'a> Debugger<'a> {
         println!("d [no]                          : delete breakpoint (ex b 1)");
         println!("bl                              : show breakpoints");
         println!("info regs                       : show registers");
+        println!("info debugsec                   : show debug section(.debug_info)");
         println!("c                               : continue program");
         println!("s                               : step-in");
         println!("p [symbol name]                 : show symbol variable (ex p global_variable)");
