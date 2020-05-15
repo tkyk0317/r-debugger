@@ -1,214 +1,214 @@
 use std::fs::File;
 use std::io::{Read, BufReader, Seek, SeekFrom, Result, Error, ErrorKind};
 
-use crate::elf::elf::ElfSecHeader;
+use crate::elf::elf64::ElfSecHeader;
 use crate::elf::leb128::ULEB128;
 
 /// DW_TAG情報
 #[derive(Debug)]
 enum DwTagInfo {
-    DwTagUnknown, // 不明
-    DwTagArrayType,
-    DwTagClassType,
-    DwTagEntryPoint,
-    DwTagEnumerationType,
-    DwTagFormalParamter,
-    DwTagImportedDeclaration,
-    DwTagLabel,
-    DwTagLexicalBlock,
-    DwTagMember,
-    DwTagPointerType,
-    DwTagReferenceType,
-    DwTagCompileUnit,
-    DwTagStringType,
-    DwTagStructureType,
-    DwTagSubroutineType,
-    DwTagTypedef,
-    DwTagUnionType,
-    DwTagUnspecifiedParameters,
-    DwTagVariant,
-    DwTagCommonBlock,
-    DwTagCommonInclusion,
-    DwTagInheritance,
-    DwTagInlinedSubroutine,
-    DwTagModule,
-    DwTagPtrToMemberType,
-    DwTagSetType,
-    DwTagSubrangeType,
-    DwTagWithStmt,
-    DwTagAccessDeclaration,
-    DwTagBaseType,
-    DwTagCatchBlock,
-    DwTagConstType,
-    DwTagConstant,
-    DwTagEnumerator,
-    DwTagFileType,
-    DwTagFriend,
-    DwTagNamelist,
-    DwTagNamelistItem,
-    DwTagPackedType,
-    DwTagSubprogram,
-    DwTagTemplateTypeParameter,
-    DwTagTemplateValueParameter,
-    DwTagThrownType,
-    DwTagTryBlock,
-    DwTagVariantPart,
-    DwTagVariable,
-    DwTagVolatileType,
+    Unknown, // 不明
+    ArrayType,
+    ClassType,
+    EntryPoint,
+    EnumerationType,
+    FormalParamter,
+    ImportedDeclaration,
+    Label,
+    LexicalBlock,
+    Member,
+    PointerType,
+    ReferenceType,
+    CompileUnit,
+    StringType,
+    StructureType,
+    SubroutineType,
+    Typedef,
+    UnionType,
+    UnspecifiedParameters,
+    Variant,
+    CommonBlock,
+    CommonInclusion,
+    Inheritance,
+    InlinedSubroutine,
+    Module,
+    PtrToMemberType,
+    SetType,
+    SubrangeType,
+    WithStmt,
+    AccessDeclaration,
+    BaseType,
+    CatchBlock,
+    ConstType,
+    Constant,
+    Enumerator,
+    FileType,
+    Friend,
+    Namelist,
+    NamelistItem,
+    PackedType,
+    Subprogram,
+    TemplateTypeParameter,
+    TemplateValueParameter,
+    ThrownType,
+    TryBlock,
+    VariantPart,
+    Variable,
+    VolatileType,
     // DWARF 3 values
-    DwTagDwarfProceduer,
-    DwTagRestritctType,
-    DwTagInterfaceType,
-    DwTagNamespace,
-    DwTagImportedModule,
-    DwTagUnspecifiedType,
-    DwTagPartialUnit,
-    DwTagImportedUnit,
-    DwTagCondition,
-    DwTagSharedType,
+    DwarfProceduer,
+    RestritctType,
+    InterfaceType,
+    Namespace,
+    ImportedModule,
+    UnspecifiedType,
+    PartialUnit,
+    ImportedUnit,
+    Condition,
+    SharedType,
     // DWARF 4 values
-    DwTagTypeUnit,
-    DwTagRvalueReferenceType,
-    DwTagTemplateAlias,
-    DwTagLoUser,
-    DwTagHiUser,
+    TypeUnit,
+    RvalueReferenceType,
+    TemplateAlias,
+    LoUser,
+    HiUser,
 }
 
 /// DW_AT情報
 #[derive(Debug)]
 enum DwAtInfo {
-    DwAtUnknown, // 不明
-    DwAtSibling,
-    DwAtLocation,
-    DwAtName,
-    DwAtOrdering,
-    DwAtSubscrData,
-    DwAtByteSize,
-    DwAtBitOffset,
-    DwAtBitSize,
-    DwAtElementList,
-    DwAtStmtList,
-    DwAtLowPc,
-    DwAtHighPc,
-    DwAtLanguage,
-    DwAtMember,
-    DwAtDiscr,
-    DwAtDiscrValue,
-    DwAtVisibility,
-    DwAtImport,
-    DwAtStringLength,
-    DwAtCommonReference,
-    DwAtCompDir,
-    DwAtConstValue,
-    DwAtContainingType,
-    DwAtDefaultValue,
-    DwAtInline,
-    DwAtIsOptional,
-    DwAtLowerBound,
-    DwAtProducer,
-    DwAtPrototyped,
-    DwAtReturnAddr,
-    DwAtStartScope,
-    DwAtBitStride,
-    DwAtUpperBound,
-    DwAtAbstractOrigin,
-    DwAtAccessibility,
-    DwAtAddressClass,
-    DwAtArtificial,
-    DwAtBaseTypes,
-    DwAtCallingConvention,
-    DwAtCount,
-    DwAtDataMemberLocation,
-    DwAtDeclColumn,
-    DwAtDeclFile,
-    DwAtDeclLine,
-    DwAtDeclaration,
-    DwAtDiscrList,
-    DwAtEncoding,
-    DwAtExternal,
-    DwAtFrameBase,
-    DwAtFriend,
-    DwAtIdentifierCase,
-    DwAtMacroInfo,
-    DwAtNamelistItems,
-    DwAtPriority,
-    DwAtSegment,
-    DwAtSpecification,
-    DwAtStaticLink,
-    DwAtType,
-    DwAtUseLocation,
-    DwAtVariableParameter,
-    DwAtVirtuality,
-    DwAtVtableElemLocation,
+    Unknown, // 不明
+    Sibling,
+    Location,
+    Name,
+    Ordering,
+    SubscrData,
+    ByteSize,
+    BitOffset,
+    BitSize,
+    ElementList,
+    StmtList,
+    LowPc,
+    HighPc,
+    Language,
+    Member,
+    Discr,
+    DiscrValue,
+    Visibility,
+    Import,
+    StringLength,
+    CommonReference,
+    CompDir,
+    ConstValue,
+    ContainingType,
+    DefaultValue,
+    Inline,
+    IsOptional,
+    LowerBound,
+    Producer,
+    Prototyped,
+    ReturnAddr,
+    StartScope,
+    BitStride,
+    UpperBound,
+    AbstractOrigin,
+    Accessibility,
+    AddressClass,
+    Artificial,
+    BaseTypes,
+    CallingConvention,
+    Count,
+    DataMemberLocation,
+    DeclColumn,
+    DeclFile,
+    DeclLine,
+    Declaration,
+    DiscrList,
+    Encoding,
+    External,
+    FrameBase,
+    Friend,
+    IdentifierCase,
+    MacroInfo,
+    NamelistItems,
+    Priority,
+    Segment,
+    Specification,
+    StaticLink,
+    Type,
+    UseLocation,
+    VariableParameter,
+    Virtuality,
+    VtableElemLocation,
     // DWARF 3 values
-    DwAtAllocated,
-    DwAtAssociated,
-    DwAtDataLocation,
-    DwAtByteStride,
-    DwAtEntryPc,
-    DwAtUseUTF8,
-    DwAtExtension,
-    DwAtRanges,
-    DwAtTrampoline,
-    DwAtCallColumn,
-    DwAtCallFile,
-    DwAtCallLine,
-    DwAtDescription,
-    DwAtBinaryScale,
-    DwAtDecimalScale,
-    DwAtSmall,
-    DwAtDecimalSign,
-    DwAtDigitCount,
-    DwAtPictureString,
-    DwAtMutable,
-    DwAtThreadsScaled,
-    DwAtExplicit,
-    DwAtObjectPointer,
-    DwAtEndianity,
-    DwAtElemental,
-    DwAtPure,
-    DwAtRecursive,
+    Allocated,
+    Associated,
+    DataLocation,
+    ByteStride,
+    EntryPc,
+    UseUTF8,
+    Extension,
+    Ranges,
+    Trampoline,
+    CallColumn,
+    CallFile,
+    CallLine,
+    Description,
+    BinaryScale,
+    DecimalScale,
+    Small,
+    DecimalSign,
+    DigitCount,
+    PictureString,
+    Mutable,
+    ThreadsScaled,
+    Explicit,
+    ObjectPointer,
+    Endianity,
+    Elemental,
+    Pure,
+    Recursive,
     // DWARF 4 values
-    DwAtSignature,
-    DwAtMainSubprogram,
-    DwAtDataBitOffset,
-    DwAtConstExpr,
-    DwAtEnumClass,
-    DwAtLinkageName,
-    DwAtEnd, // 終了attr
+    Signature,
+    MainSubprogram,
+    DataBitOffset,
+    ConstExpr,
+    EnumClass,
+    LinkageName,
+    End, // 終了attr
 }
 
 /// DW_FORM情報
 #[derive(Debug)]
 enum DwFormInfo {
-    DwFormUnknown, // 不明
-    DwFormAddr,
-    DwFormBlock2,
-    DwFormBlock4,
-    DwFormData2,
-    DwFormData4,
-    DwFormData8,
-    DwFormString,
-    DwFormBlock,
-    DwFormBlock1,
-    DwFormData1,
-    DwFormFlag,
-    DwFormSdata,
-    DwFormStrp,
-    DwFormUdata,
-    DwFormRefAddr,
-    DwFormRef1,
-    DwFormRef2,
-    DwFormRef4,
-    DwFormRef8,
-    DwFormRefUdata,
-    DwFormIndirect,
+    Unknown, // 不明
+    Addr,
+    Block2,
+    Block4,
+    Data2,
+    Data4,
+    Data8,
+    String,
+    Block,
+    Block1,
+    Data1,
+    Flag,
+    Sdata,
+    Strp,
+    Udata,
+    RefAddr,
+    Ref1,
+    Ref2,
+    Ref4,
+    Ref8,
+    RefUdata,
+    Indirect,
     // dwarf4
-    DwFormSecOffset,
-    DwFormExprloc,
-    DwFormFlagPresent,
-    DwFormRefSig8,
-    DwFormEnd, // 終了form
+    SecOffset,
+    Exprloc,
+    FlagPresent,
+    RefSig8,
+    End, // 終了form
 }
 
 /// DW情報変換trait
@@ -216,69 +216,69 @@ trait DwInfo {
     /// DW_TAGコンバート
     fn to_dw_tag(tag: u64) -> DwTagInfo {
         match tag {
-            0x1  => DwTagInfo::DwTagArrayType,
-            0x2  => DwTagInfo::DwTagClassType,
-            0x3  => DwTagInfo::DwTagEntryPoint,
-            0x4  => DwTagInfo::DwTagEnumerationType,
-            0x5  => DwTagInfo::DwTagFormalParamter,
-            0x8  => DwTagInfo::DwTagImportedDeclaration,
-            0xA  => DwTagInfo::DwTagLabel,
-            0xB  => DwTagInfo::DwTagLexicalBlock,
-            0xD  => DwTagInfo::DwTagMember,
-            0xF  => DwTagInfo::DwTagPointerType,
-            0x10 => DwTagInfo::DwTagReferenceType,
-            0x11 => DwTagInfo::DwTagCompileUnit,
-            0x12 => DwTagInfo::DwTagStringType,
-            0x13 => DwTagInfo::DwTagStructureType,
-            0x15 => DwTagInfo::DwTagSubroutineType,
-            0x16 => DwTagInfo::DwTagTypedef,
-            0x17 => DwTagInfo::DwTagUnionType,
-            0x18 => DwTagInfo::DwTagUnspecifiedParameters,
-            0x19 => DwTagInfo::DwTagVariant,
-            0x1A => DwTagInfo::DwTagCommonBlock,
-            0x1B => DwTagInfo::DwTagCommonInclusion,
-            0x1C => DwTagInfo::DwTagInheritance,
-            0x1D => DwTagInfo::DwTagInlinedSubroutine,
-            0x1E => DwTagInfo::DwTagModule,
-            0x1F => DwTagInfo::DwTagPtrToMemberType,
-            0x20 => DwTagInfo::DwTagSetType,
-            0x21 => DwTagInfo::DwTagSubrangeType,
-            0x22 => DwTagInfo::DwTagWithStmt,
-            0x23 => DwTagInfo::DwTagAccessDeclaration,
-            0x24 => DwTagInfo::DwTagBaseType,
-            0x25 => DwTagInfo::DwTagCatchBlock,
-            0x26 => DwTagInfo::DwTagConstType,
-            0x27 => DwTagInfo::DwTagConstant,
-            0x28 => DwTagInfo::DwTagEnumerator,
-            0x29 => DwTagInfo::DwTagFileType,
-            0x2A => DwTagInfo::DwTagFriend,
-            0x2B => DwTagInfo::DwTagNamelist,
-            0x2C => DwTagInfo::DwTagNamelistItem,
-            0x2D => DwTagInfo::DwTagPackedType,
-            0x2E => DwTagInfo::DwTagSubprogram,
-            0x2F => DwTagInfo::DwTagTemplateTypeParameter,
-            0x30 => DwTagInfo::DwTagTemplateValueParameter,
-            0x31 => DwTagInfo::DwTagThrownType,
-            0x32 => DwTagInfo::DwTagTryBlock,
-            0x33 => DwTagInfo::DwTagVariantPart,
-            0x34 => DwTagInfo::DwTagVariable,
-            0x35 => DwTagInfo::DwTagVolatileType,
-            0x36 => DwTagInfo::DwTagDwarfProceduer,
-            0x37 => DwTagInfo::DwTagRestritctType,
-            0x38 => DwTagInfo::DwTagInterfaceType,
-            0x39 => DwTagInfo::DwTagNamespace,
-            0x3A => DwTagInfo::DwTagImportedModule,
-            0x3B => DwTagInfo::DwTagUnspecifiedType,
-            0x3C => DwTagInfo::DwTagPartialUnit,
-            0x3D => DwTagInfo::DwTagImportedUnit,
-            0x3F => DwTagInfo::DwTagCondition,
-            0x40 => DwTagInfo::DwTagSharedType,
-            0x41 => DwTagInfo::DwTagTypeUnit,
-            0x42 => DwTagInfo::DwTagRvalueReferenceType,
-            0x43 => DwTagInfo::DwTagTemplateAlias,
-            0x4080 => DwTagInfo::DwTagLoUser,
-            0xFFFF => DwTagInfo::DwTagHiUser,
-            _ =>  DwTagInfo::DwTagUnknown,
+            0x1  => DwTagInfo::ArrayType,
+            0x2  => DwTagInfo::ClassType,
+            0x3  => DwTagInfo::EntryPoint,
+            0x4  => DwTagInfo::EnumerationType,
+            0x5  => DwTagInfo::FormalParamter,
+            0x8  => DwTagInfo::ImportedDeclaration,
+            0xA  => DwTagInfo::Label,
+            0xB  => DwTagInfo::LexicalBlock,
+            0xD  => DwTagInfo::Member,
+            0xF  => DwTagInfo::PointerType,
+            0x10 => DwTagInfo::ReferenceType,
+            0x11 => DwTagInfo::CompileUnit,
+            0x12 => DwTagInfo::StringType,
+            0x13 => DwTagInfo::StructureType,
+            0x15 => DwTagInfo::SubroutineType,
+            0x16 => DwTagInfo::Typedef,
+            0x17 => DwTagInfo::UnionType,
+            0x18 => DwTagInfo::UnspecifiedParameters,
+            0x19 => DwTagInfo::Variant,
+            0x1A => DwTagInfo::CommonBlock,
+            0x1B => DwTagInfo::CommonInclusion,
+            0x1C => DwTagInfo::Inheritance,
+            0x1D => DwTagInfo::InlinedSubroutine,
+            0x1E => DwTagInfo::Module,
+            0x1F => DwTagInfo::PtrToMemberType,
+            0x20 => DwTagInfo::SetType,
+            0x21 => DwTagInfo::SubrangeType,
+            0x22 => DwTagInfo::WithStmt,
+            0x23 => DwTagInfo::AccessDeclaration,
+            0x24 => DwTagInfo::BaseType,
+            0x25 => DwTagInfo::CatchBlock,
+            0x26 => DwTagInfo::ConstType,
+            0x27 => DwTagInfo::Constant,
+            0x28 => DwTagInfo::Enumerator,
+            0x29 => DwTagInfo::FileType,
+            0x2A => DwTagInfo::Friend,
+            0x2B => DwTagInfo::Namelist,
+            0x2C => DwTagInfo::NamelistItem,
+            0x2D => DwTagInfo::PackedType,
+            0x2E => DwTagInfo::Subprogram,
+            0x2F => DwTagInfo::TemplateTypeParameter,
+            0x30 => DwTagInfo::TemplateValueParameter,
+            0x31 => DwTagInfo::ThrownType,
+            0x32 => DwTagInfo::TryBlock,
+            0x33 => DwTagInfo::VariantPart,
+            0x34 => DwTagInfo::Variable,
+            0x35 => DwTagInfo::VolatileType,
+            0x36 => DwTagInfo::DwarfProceduer,
+            0x37 => DwTagInfo::RestritctType,
+            0x38 => DwTagInfo::InterfaceType,
+            0x39 => DwTagInfo::Namespace,
+            0x3A => DwTagInfo::ImportedModule,
+            0x3B => DwTagInfo::UnspecifiedType,
+            0x3C => DwTagInfo::PartialUnit,
+            0x3D => DwTagInfo::ImportedUnit,
+            0x3F => DwTagInfo::Condition,
+            0x40 => DwTagInfo::SharedType,
+            0x41 => DwTagInfo::TypeUnit,
+            0x42 => DwTagInfo::RvalueReferenceType,
+            0x43 => DwTagInfo::TemplateAlias,
+            0x4080 => DwTagInfo::LoUser,
+            0xFFFF => DwTagInfo::HiUser,
+            _ =>  DwTagInfo::Unknown,
         }
     }
 
@@ -293,136 +293,136 @@ trait DwInfo {
     /// DW_ATコンバート
     fn to_dw_at(at: u64) -> DwAtInfo {
         match at {
-            0x0  => DwAtInfo::DwAtEnd,
-            0x1  => DwAtInfo::DwAtSibling,
-            0x2  => DwAtInfo::DwAtLocation,
-            0x3  => DwAtInfo::DwAtName,
-            0x9  => DwAtInfo::DwAtOrdering,
-            0xA => DwAtInfo::DwAtSubscrData,
-            0xB => DwAtInfo::DwAtByteSize,
-            0xC => DwAtInfo::DwAtBitOffset,
-            0xD => DwAtInfo::DwAtBitSize,
-            0xF => DwAtInfo::DwAtElementList,
-            0x10 => DwAtInfo::DwAtStmtList,
-            0x11 => DwAtInfo::DwAtLowPc,
-            0x12 => DwAtInfo::DwAtHighPc,
-            0x13 => DwAtInfo::DwAtLanguage,
-            0x14 => DwAtInfo::DwAtMember,
-            0x15 => DwAtInfo::DwAtDiscr,
-            0x16 => DwAtInfo::DwAtDiscrValue,
-            0x17 => DwAtInfo::DwAtVisibility,
-            0x18 => DwAtInfo::DwAtImport,
-            0x19 => DwAtInfo::DwAtStringLength,
-            0x1A => DwAtInfo::DwAtCommonReference,
-            0x1B => DwAtInfo::DwAtCompDir,
-            0x1C => DwAtInfo::DwAtConstValue,
-            0x1D => DwAtInfo::DwAtContainingType,
-            0x1E => DwAtInfo::DwAtDefaultValue,
-            0x20 => DwAtInfo::DwAtInline,
-            0x21 => DwAtInfo::DwAtIsOptional,
-            0x22 => DwAtInfo::DwAtLowerBound,
-            0x25 => DwAtInfo::DwAtProducer,
-            0x27 => DwAtInfo::DwAtPrototyped,
-            0x2A => DwAtInfo::DwAtReturnAddr,
-            0x2C => DwAtInfo::DwAtStartScope,
-            0x2E => DwAtInfo::DwAtBitStride,
-            0x2F => DwAtInfo::DwAtUpperBound,
-            0x31 => DwAtInfo::DwAtAbstractOrigin,
-            0x32 => DwAtInfo::DwAtAccessibility,
-            0x33 => DwAtInfo::DwAtAddressClass,
-            0x34 => DwAtInfo::DwAtArtificial,
-            0x35 => DwAtInfo::DwAtBaseTypes,
-            0x36 => DwAtInfo::DwAtCallingConvention,
-            0x37 => DwAtInfo::DwAtCount,
-            0x38 => DwAtInfo::DwAtDataMemberLocation,
-            0x39 => DwAtInfo::DwAtDeclColumn,
-            0x3A => DwAtInfo::DwAtDeclFile,
-            0x3B => DwAtInfo::DwAtDeclLine,
-            0x3C => DwAtInfo::DwAtDeclaration,
-            0x3D => DwAtInfo::DwAtDiscrList,
-            0x3E => DwAtInfo::DwAtEncoding,
-            0x3F => DwAtInfo::DwAtExternal,
-            0x40 => DwAtInfo::DwAtFrameBase,
-            0x41 => DwAtInfo::DwAtFriend,
-            0x42 => DwAtInfo::DwAtIdentifierCase,
-            0x43 => DwAtInfo::DwAtMacroInfo,
-            0x44 => DwAtInfo::DwAtNamelistItems,
-            0x45 => DwAtInfo::DwAtPriority,
-            0x46 => DwAtInfo::DwAtSegment,
-            0x47 => DwAtInfo::DwAtSpecification,
-            0x48 => DwAtInfo::DwAtStaticLink,
-            0x49 => DwAtInfo::DwAtType,
-            0x4A => DwAtInfo::DwAtUseLocation,
-            0x4B => DwAtInfo::DwAtVariableParameter,
-            0x4C => DwAtInfo::DwAtVirtuality,
-            0x4D => DwAtInfo::DwAtVtableElemLocation,
-            0x4E => DwAtInfo::DwAtAllocated,
-            0x4F => DwAtInfo::DwAtAssociated,
-            0x50 => DwAtInfo::DwAtDataLocation,
-            0x51 => DwAtInfo::DwAtByteStride,
-            0x52 => DwAtInfo::DwAtEntryPc,
-            0x53 => DwAtInfo::DwAtUseUTF8,
-            0x54 => DwAtInfo::DwAtExtension,
-            0x55 => DwAtInfo::DwAtRanges,
-            0x56 => DwAtInfo::DwAtTrampoline,
-            0x57 => DwAtInfo::DwAtCallColumn,
-            0x58 => DwAtInfo::DwAtCallFile,
-            0x59 => DwAtInfo::DwAtCallLine,
-            0x5A => DwAtInfo::DwAtDescription,
-            0x5B => DwAtInfo::DwAtBinaryScale,
-            0x5C => DwAtInfo::DwAtDecimalScale,
-            0x5D => DwAtInfo::DwAtSmall,
-            0x5E => DwAtInfo::DwAtDecimalSign,
-            0x5F => DwAtInfo::DwAtDigitCount,
-            0x60 => DwAtInfo::DwAtPictureString,
-            0x61 => DwAtInfo::DwAtMutable,
-            0x62 => DwAtInfo::DwAtThreadsScaled,
-            0x63 => DwAtInfo::DwAtExplicit,
-            0x64 => DwAtInfo::DwAtObjectPointer,
-            0x65 => DwAtInfo::DwAtEndianity,
-            0x66 => DwAtInfo::DwAtElemental,
-            0x67 => DwAtInfo::DwAtPure,
-            0x68 => DwAtInfo::DwAtRecursive,
-            0x69 => DwAtInfo::DwAtSignature,
-            0x6A => DwAtInfo::DwAtMainSubprogram,
-            0x6B => DwAtInfo::DwAtDataBitOffset,
-            0x6C => DwAtInfo::DwAtConstExpr,
-            0x6D => DwAtInfo::DwAtEnumClass,
-            0x6E => DwAtInfo::DwAtLinkageName,
-            _ =>  DwAtInfo::DwAtUnknown,
+            0x0  => DwAtInfo::End,
+            0x1  => DwAtInfo::Sibling,
+            0x2  => DwAtInfo::Location,
+            0x3  => DwAtInfo::Name,
+            0x9  => DwAtInfo::Ordering,
+            0xA => DwAtInfo::SubscrData,
+            0xB => DwAtInfo::ByteSize,
+            0xC => DwAtInfo::BitOffset,
+            0xD => DwAtInfo::BitSize,
+            0xF => DwAtInfo::ElementList,
+            0x10 => DwAtInfo::StmtList,
+            0x11 => DwAtInfo::LowPc,
+            0x12 => DwAtInfo::HighPc,
+            0x13 => DwAtInfo::Language,
+            0x14 => DwAtInfo::Member,
+            0x15 => DwAtInfo::Discr,
+            0x16 => DwAtInfo::DiscrValue,
+            0x17 => DwAtInfo::Visibility,
+            0x18 => DwAtInfo::Import,
+            0x19 => DwAtInfo::StringLength,
+            0x1A => DwAtInfo::CommonReference,
+            0x1B => DwAtInfo::CompDir,
+            0x1C => DwAtInfo::ConstValue,
+            0x1D => DwAtInfo::ContainingType,
+            0x1E => DwAtInfo::DefaultValue,
+            0x20 => DwAtInfo::Inline,
+            0x21 => DwAtInfo::IsOptional,
+            0x22 => DwAtInfo::LowerBound,
+            0x25 => DwAtInfo::Producer,
+            0x27 => DwAtInfo::Prototyped,
+            0x2A => DwAtInfo::ReturnAddr,
+            0x2C => DwAtInfo::StartScope,
+            0x2E => DwAtInfo::BitStride,
+            0x2F => DwAtInfo::UpperBound,
+            0x31 => DwAtInfo::AbstractOrigin,
+            0x32 => DwAtInfo::Accessibility,
+            0x33 => DwAtInfo::AddressClass,
+            0x34 => DwAtInfo::Artificial,
+            0x35 => DwAtInfo::BaseTypes,
+            0x36 => DwAtInfo::CallingConvention,
+            0x37 => DwAtInfo::Count,
+            0x38 => DwAtInfo::DataMemberLocation,
+            0x39 => DwAtInfo::DeclColumn,
+            0x3A => DwAtInfo::DeclFile,
+            0x3B => DwAtInfo::DeclLine,
+            0x3C => DwAtInfo::Declaration,
+            0x3D => DwAtInfo::DiscrList,
+            0x3E => DwAtInfo::Encoding,
+            0x3F => DwAtInfo::External,
+            0x40 => DwAtInfo::FrameBase,
+            0x41 => DwAtInfo::Friend,
+            0x42 => DwAtInfo::IdentifierCase,
+            0x43 => DwAtInfo::MacroInfo,
+            0x44 => DwAtInfo::NamelistItems,
+            0x45 => DwAtInfo::Priority,
+            0x46 => DwAtInfo::Segment,
+            0x47 => DwAtInfo::Specification,
+            0x48 => DwAtInfo::StaticLink,
+            0x49 => DwAtInfo::Type,
+            0x4A => DwAtInfo::UseLocation,
+            0x4B => DwAtInfo::VariableParameter,
+            0x4C => DwAtInfo::Virtuality,
+            0x4D => DwAtInfo::VtableElemLocation,
+            0x4E => DwAtInfo::Allocated,
+            0x4F => DwAtInfo::Associated,
+            0x50 => DwAtInfo::DataLocation,
+            0x51 => DwAtInfo::ByteStride,
+            0x52 => DwAtInfo::EntryPc,
+            0x53 => DwAtInfo::UseUTF8,
+            0x54 => DwAtInfo::Extension,
+            0x55 => DwAtInfo::Ranges,
+            0x56 => DwAtInfo::Trampoline,
+            0x57 => DwAtInfo::CallColumn,
+            0x58 => DwAtInfo::CallFile,
+            0x59 => DwAtInfo::CallLine,
+            0x5A => DwAtInfo::Description,
+            0x5B => DwAtInfo::BinaryScale,
+            0x5C => DwAtInfo::DecimalScale,
+            0x5D => DwAtInfo::Small,
+            0x5E => DwAtInfo::DecimalSign,
+            0x5F => DwAtInfo::DigitCount,
+            0x60 => DwAtInfo::PictureString,
+            0x61 => DwAtInfo::Mutable,
+            0x62 => DwAtInfo::ThreadsScaled,
+            0x63 => DwAtInfo::Explicit,
+            0x64 => DwAtInfo::ObjectPointer,
+            0x65 => DwAtInfo::Endianity,
+            0x66 => DwAtInfo::Elemental,
+            0x67 => DwAtInfo::Pure,
+            0x68 => DwAtInfo::Recursive,
+            0x69 => DwAtInfo::Signature,
+            0x6A => DwAtInfo::MainSubprogram,
+            0x6B => DwAtInfo::DataBitOffset,
+            0x6C => DwAtInfo::ConstExpr,
+            0x6D => DwAtInfo::EnumClass,
+            0x6E => DwAtInfo::LinkageName,
+            _ =>  DwAtInfo::Unknown,
         }
     }
 
     /// DW_FROMコンバート
     fn to_dw_form(form: u64) -> DwFormInfo {
         match form {
-            0x0  => DwFormInfo::DwFormEnd,
-            0x1  => DwFormInfo::DwFormAddr,
-            0x3  => DwFormInfo::DwFormBlock2,
-            0x4  => DwFormInfo::DwFormBlock4,
-            0x5  => DwFormInfo::DwFormData2,
-            0x6  => DwFormInfo::DwFormData4,
-            0x7  => DwFormInfo::DwFormData8,
-            0x8 => DwFormInfo::DwFormString,
-            0x9 => DwFormInfo::DwFormBlock,
-            0xA => DwFormInfo::DwFormBlock1,
-            0xB => DwFormInfo::DwFormData1,
-            0xC => DwFormInfo::DwFormFlag,
-            0xD => DwFormInfo::DwFormSdata,
-            0xE  => DwFormInfo::DwFormStrp,
-            0xF => DwFormInfo::DwFormUdata,
-            0x10 => DwFormInfo::DwFormRefAddr,
-            0x11 => DwFormInfo::DwFormRef1,
-            0x12 => DwFormInfo::DwFormRef2,
-            0x13 => DwFormInfo::DwFormRef4,
-            0x14 => DwFormInfo::DwFormRef8,
-            0x15 => DwFormInfo::DwFormRefUdata,
-            0x16 => DwFormInfo::DwFormIndirect,
-            0x17 => DwFormInfo::DwFormSecOffset,
-            0x18 => DwFormInfo::DwFormExprloc,
-            0x19 => DwFormInfo::DwFormFlagPresent,
-            0x20 => DwFormInfo::DwFormRefSig8,
-            _ =>  DwFormInfo::DwFormUnknown,
+            0x0  => DwFormInfo::End,
+            0x1  => DwFormInfo::Addr,
+            0x3  => DwFormInfo::Block2,
+            0x4  => DwFormInfo::Block4,
+            0x5  => DwFormInfo::Data2,
+            0x6  => DwFormInfo::Data4,
+            0x7  => DwFormInfo::Data8,
+            0x8 => DwFormInfo::String,
+            0x9 => DwFormInfo::Block,
+            0xA => DwFormInfo::Block1,
+            0xB => DwFormInfo::Data1,
+            0xC => DwFormInfo::Flag,
+            0xD => DwFormInfo::Sdata,
+            0xE  => DwFormInfo::Strp,
+            0xF => DwFormInfo::Udata,
+            0x10 => DwFormInfo::RefAddr,
+            0x11 => DwFormInfo::Ref1,
+            0x12 => DwFormInfo::Ref2,
+            0x13 => DwFormInfo::Ref4,
+            0x14 => DwFormInfo::Ref8,
+            0x15 => DwFormInfo::RefUdata,
+            0x16 => DwFormInfo::Indirect,
+            0x17 => DwFormInfo::SecOffset,
+            0x18 => DwFormInfo::Exprloc,
+            0x19 => DwFormInfo::FlagPresent,
+            0x20 => DwFormInfo::RefSig8,
+            _ =>  DwFormInfo::Unknown,
         }
     }
 }
@@ -680,7 +680,7 @@ impl DebugInfoSection {
 
             // 対応するabbrevをロード
             let mut abbrev = DebugAbbRevSection::new();
-            let offset = cu_h.abb_rev_offset.clone();
+            let offset = cu_h.abb_rev_offset;
             abbrev.load(reader, &abbrev_h, offset as u64)?;
 
             // abbrevを読み取りながら、debug_infoセクションをロードしていく
@@ -733,131 +733,131 @@ impl DebugInfoSection {
             // DW_FORMに応じたデータを読み取る
             for (form, at) in record.attr_form.iter().zip(record.attr_name.iter()) {
                 let data = match Self::to_dw_form(*form) {
-                    DwFormInfo::DwFormStrp => {
+                    DwFormInfo::Strp => {
                         // DIEにはdebug_strのオフセットが入っている
                         let mut buf = [0; 4];
                         let offset = match reader.read_exact(&mut buf) {
                             Ok(_) => u32::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_str")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_str {:?}", e)
                         };
                         read_size += 4;
 
                         // debug_strbufセクションから対応する文字列を読み込む
                         self.to_string(str_buf, offset as usize)
                     }
-                    DwFormInfo::DwFormAddr => {
+                    DwFormInfo::Addr => {
                         // debug_infoセクションに即値が格納
                         let mut buf = [0; 8];
                         let addr = match reader.read_exact(&mut buf) {
                             Ok(_) => u64::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 8;
                         addr.to_string()
                     }
-                    DwFormInfo::DwFormData1 => {
+                    DwFormInfo::Data1 => {
                         // 1byteデータがdebug_infoセクションに格納
                         let mut buf = [0; 1];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u8::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 1;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormData2 => {
+                    DwFormInfo::Data2 => {
                         // 2byteデータがdebug_infoセクションに格納
                         let mut buf = [0; 2];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u16::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 2;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormData4 => {
+                    DwFormInfo::Data4 => {
                         // 4byteデータがdebug_infoセクションに格納
                         let mut buf = [0; 4];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u32::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 4;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormData8 => {
+                    DwFormInfo::Data8 => {
                         // 8byteデータがdebug_infoセクションに格納
                         let mut buf = [0; 8];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u64::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 8;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormSecOffset => {
+                    DwFormInfo::SecOffset => {
                         // 4byteデータがdebug_infoセクションに格納
                         let mut buf = [0; 4];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u32::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 4;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormRef1 => {
+                    DwFormInfo::Ref1 => {
                         // CUヘッダーからのオフセットが、.debug_infoセクションに格納
                         let mut buf = [0; 1];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u8::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 1;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormRef2 => {
+                    DwFormInfo::Ref2 => {
                         // CUヘッダーからのオフセットが、.debug_infoセクションに格納
                         let mut buf = [0; 2];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u16::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 2;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormRef4 => {
+                    DwFormInfo::Ref4 => {
                         // CUヘッダーからのオフセットが、.debug_infoセクションに格納
                         let mut buf = [0; 4];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u32::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 4;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormRef8 => {
+                    DwFormInfo::Ref8 => {
                         // CUヘッダーからのオフセットが、.debug_infoセクションに格納
                         let mut buf = [0; 8];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u64::from_le_bytes(buf),
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                         };
                         read_size += 8;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormSdata => {
+                    DwFormInfo::Sdata => {
                         // sUEB128方式でdebug_infoセクションに格納
                         let (size, data) = DebugInfoSection::decode(reader).unwrap();
                         read_size += size;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormUdata => {
+                    DwFormInfo::Udata => {
                         // uUEB128方式でdebug_infoセクションに格納
                         let (size, data) = DebugInfoSection::decode(reader).unwrap();
                         read_size += size;
                         data.to_string()
                     }
-                    DwFormInfo::DwFormString => {
+                    DwFormInfo::String => {
                         // null terminateの文字列がdebug_infoセクションに格納
                         let mut st: Vec<u8> = vec![];
                         let mut st_size = 0;
@@ -865,7 +865,7 @@ impl DebugInfoSection {
                              let mut buf = [0; 1];
                              let data = match reader.read_exact(&mut buf) {
                                  Ok(_) => u8::from_le_bytes(buf),
-                                 Err(_) => panic!("[DebugInfoSection::parse] cannot read from debug_info")
+                                 Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
                              };
                              st.push(data);
                              st_size += 1;
@@ -874,7 +874,7 @@ impl DebugInfoSection {
                         read_size += st_size;
                         String::from_utf8(st).unwrap()
                     }
-                    DwFormInfo::DwFormExprloc => {
+                    DwFormInfo::Exprloc => {
                         // uUEB128方式でdebug_infoセクションに格納
                         let (size, data) = DebugInfoSection::decode(reader).unwrap();
 
@@ -885,15 +885,15 @@ impl DebugInfoSection {
                                 // exprlocとそのデータサイズ分を加算
                                 read_size += size + data;
                              }
-                            Err(_) => panic!("[DebugInfoSection::parse] cannot exprloc")
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot exprloc {:?}", e)
                         }
                         data.to_string()
                     }
-                    DwFormInfo::DwFormFlagPresent => {
+                    DwFormInfo::FlagPresent => {
                         // フラグが存在していることを暗黙的に示している
                         "flag is presetn".to_string()
                     }
-                    DwFormInfo::DwFormEnd => {
+                    DwFormInfo::End => {
                         "value: 0".to_string()
                     }
                     _ => {

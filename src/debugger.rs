@@ -3,7 +3,7 @@ use nix::unistd::{ Pid };
 use nix::sys::wait::*;
 use nix::sys::ptrace::{ cont, read, write, step, getregs, setregs, kill, AddressType };
 
-use crate::elf::elf::Elf64;
+use crate::elf::elf64::Elf64;
 use crate::memory_map::MemoryMap;
 use crate::address::{AddressTrait, AdrFromRel, AdrFromAbs};
 
