@@ -1,6 +1,5 @@
 .PHONY: all
 all:
-	@cargo clippy
 	@cargo b
 	@cd sample && clang++ -g test.cpp main.cpp -o test
 	@cd ..
@@ -13,11 +12,16 @@ strace: all
 dbg: all
 	@RUST_BACKTRACE=1 ./target/debug/r-debugger dbg ./sample/test
 
+.PHONY: clippy
+clippy:
+	@cargo clean -p r-debugger
+	@cargo clippy
+
 .PHONY: clean
 clean:
 	@cd sample && rm -rf ./test
 	@cargo clean
 
 .PHONY: test
-test:
+test: clippy
 	@cargo test
