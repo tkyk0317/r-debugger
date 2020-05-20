@@ -5,7 +5,7 @@ use crate::elf::elf64::ElfSecHeader;
 use crate::elf::leb128::ULEB128;
 
 /// DW_TAG情報
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 enum DwTagInfo {
     Unknown, // 不明
     ArrayType,
@@ -75,7 +75,7 @@ enum DwTagInfo {
 }
 
 /// DW_AT情報
-#[derive(Debug)]
+#[derive(Debug,Clone,PartialEq)]
 enum DwAtInfo {
     Unknown, // 不明
     Sibling,
@@ -493,13 +493,13 @@ impl DebugAbbRevSection {
         // 各データをロード
         loop {
             let mut abbrev = DebugAbbRevRecord::new();
-            abbrev.abbrev_no = DebugAbbRevSection::decode(reader).unwrap().1;
+            abbrev.abbrev_no = Self::decode(reader).unwrap().1;
 
             // noがゼロならば、abbrevは終了
             if 0 == abbrev.abbrev_no {
                 break;
             }
-            abbrev.tag = DebugAbbRevSection::decode(reader).unwrap().1;
+            abbrev.tag = Self::decode(reader).unwrap().1;
 
             // has_childは1byte
             let mut b = [0; 1];
@@ -508,8 +508,8 @@ impl DebugAbbRevSection {
 
             // attribute/formコードをロード（name=0x00, form=0x00までループ)
             loop {
-                let attr_name = DebugAbbRevSection::decode(reader).unwrap().1;
-                let attr_form = DebugAbbRevSection::decode(reader).unwrap().1;
+                let attr_name = Self::decode(reader).unwrap().1;
+                let attr_form = Self::decode(reader).unwrap().1;
                 abbrev.attr_name.push(attr_name);
                 abbrev.attr_form.push(attr_form);
 
@@ -531,6 +531,238 @@ impl DebugAbbRevSection {
     fn show(&self) {
         for a in &self.abb_rev {
             a.show();
+        }
+    }
+}
+
+/// debug_lineセクションに存在するfile_namesデータ
+#[derive(Debug)]
+struct Filenames {
+    name: String,
+    dir_entry: u64,
+    last_modify: u64,
+    size: u64,
+}
+impl Filenames {
+    /// コンストラクタ
+    pub fn new() -> Self {
+        Filenames {
+            name: "".to_string(),
+            dir_entry: 0,
+            last_modify: 0,
+            size: 0,
+        }
+    }
+}
+
+/// debug_lineセクションヘッダ情報
+#[derive(Debug)]
+struct DebugLineHeader {
+    len: u32,
+    version: u16,
+    header_len: u32,
+    min_inst_len: u8,
+    max_ope_len: u8,
+    is_stmt: u8,
+    line_base: i8,
+    line_range: u8,
+    opcode_base: u8,
+    standard_opcode_len: Vec<u64>,
+    inc_dirs: Vec<String>,
+    file_names: Vec<Filenames>,
+}
+impl DebugLineHeader {
+    /// コンストラクタ
+    pub fn new() -> Self {
+        DebugLineHeader {
+            len: 0,
+            version: 0,
+            header_len: 0,
+            min_inst_len: 0,
+            max_ope_len: 0,
+            is_stmt: 0,
+            line_base: 0,
+            line_range: 0,
+            opcode_base: 0,
+            standard_opcode_len: vec![],
+            inc_dirs: vec![],
+            file_names: vec![]
+        }
+    }
+}
+
+/// debug_lineセクション
+#[derive(Debug)]
+struct DebugLineSection {
+    offset: u64, // セクションデータ先頭へのオフセット
+    cu_header: Vec<DebugLineHeader>, // CU毎に定義されているヘッダー情報
+}
+
+impl ULEB128 for DebugLineSection {}
+impl DebugLineSection {
+    /// コンストラクタ
+    pub fn new(o: u64) -> Self {
+        DebugLineSection {
+            offset: o,
+            cu_header: vec![],
+        }
+    }
+
+    /// debug_line ロード処理
+    pub fn load(&mut self, path: &str, offset: u64) -> Result<()> {
+        // debug_lineセクション先頭へ移動
+        let f = File::open(&path)?;
+        let mut reader = BufReader::new(f);
+        reader.seek(SeekFrom::Start(self.offset + offset))?;
+
+        // headerのロード
+        let h = self.load_header(&mut reader)?;
+        self.cu_header.push(h);
+
+        Ok(())
+    }
+
+    /// debug line情報表示
+    pub fn show(&self) {
+        println!("The line numebr program header");
+        self.cu_header.iter().for_each(|h| {
+            println!("    len:          {}", h.len);
+            println!("    version:      {}", h.version);
+            println!("    header len:   {}", h.header_len);
+            println!("    min inst len: {}", h.min_inst_len);
+            println!("    max ope len:  {}", h.max_ope_len);
+            println!("    is stmt:      {}", h.is_stmt);
+            println!("    line base:    {}", h.line_base);
+            println!("    line range:   {}", h.line_range);
+            println!("    opecode base: {}", h.opcode_base);
+            println!();
+            println!("    ope code:");
+            for (i, ope) in h.standard_opcode_len.iter().enumerate() {
+                println!("    opecode {}: has {} argment", i + 1, ope);
+            };
+            println!();
+            println!("    directory entry:");
+            for (i, entry) in h.inc_dirs.iter().enumerate() {
+                println!("    no {}: {}", i + 1, entry);
+            }
+            println!();
+            println!("    file entry:");
+            for entry in &h.file_names {
+                println!(
+                    "    dir no: {} last modify: {} size: {} {}",
+                    entry.dir_entry, entry.last_modify, entry.size, entry.name
+                );
+            }
+            println!();
+        });
+    }
+
+    /// headerロード
+    fn load_header(&self, reader: &mut BufReader<File>) -> Result<DebugLineHeader> {
+        let mut header = DebugLineHeader::new();
+
+        // len
+        let mut word = [0; 4];
+        reader.read_exact(&mut word)?;
+        header.len = u32::from_le_bytes(word);
+
+        // version
+        let mut half_word = [0; 2];
+        reader.read_exact(&mut half_word)?;
+        header.version = u16::from_le_bytes(half_word);
+
+        // header len
+        reader.read_exact(&mut word)?;
+        header.header_len = u32::from_le_bytes(word);
+
+        // min inst len
+        let mut byte = [0; 1];
+        reader.read_exact(&mut byte)?;
+        header.min_inst_len = u8::from_le_bytes(byte);
+
+        // max ope len
+        reader.read_exact(&mut byte)?;
+        header.max_ope_len = u8::from_le_bytes(byte);
+
+        // is stmt
+        reader.read_exact(&mut byte)?;
+        header.max_ope_len = u8::from_le_bytes(byte);
+
+        // line base
+        reader.read_exact(&mut byte)?;
+        header.line_base = i8::from_le_bytes(byte);
+
+        // line range
+        reader.read_exact(&mut byte)?;
+        header.line_range = u8::from_le_bytes(byte);
+
+        // opecode base
+        reader.read_exact(&mut byte)?;
+        header.opcode_base = u8::from_le_bytes(byte);
+
+        // standard opecode len([opecode base - 1]個分)
+        (0..header.opcode_base - 1).for_each(|_| {
+            if let Ok(arg) = Self::decode(reader) {
+                header.standard_opcode_len.push(arg.1);
+            }
+        });
+
+        // include directories
+        loop {
+            // null終端までがディレクトリエントリー
+            let s = self.get_null_term_str(reader)?;
+
+            // 最後のエントリーはNULL文字
+            if s.is_empty() { break; }
+
+            // include directory保存
+            header.inc_dirs.push(s);
+        }
+
+        // file names
+        loop {
+            // null終端までがファイル名
+            let mut f = Filenames::new();
+            let s = self.get_null_term_str(reader)?;
+
+            // 最後のエントリーはNULL文字
+            if s.is_empty() { break; }
+            f.name = s;
+
+            // directory entry
+            if let Ok(entry) = Self::decode(reader) { f.dir_entry = entry.1; }
+
+            // last modification
+            if let Ok(modify) = Self::decode(reader) { f.last_modify = modify.1; }
+
+            // file size
+            if let Ok(size) = Self::decode(reader) { f.size = size.1; }
+
+            // file name情報を保存
+            header.file_names.push(f)
+        }
+
+        Ok(header)
+    }
+
+    /// null終端までの文字列を取得
+    fn get_null_term_str(&self, reader: &mut BufReader<File>) -> Result<String> {
+        let mut buf = vec![];
+        loop {
+            // null終端までのデータを取得
+            let mut byte = [0; 1];
+            reader.read_exact(&mut byte)?;
+            let c = u8::from_le_bytes(byte);
+
+            // nullチェック
+            if c == 0 { break; }
+            buf.push(c);
+        }
+
+        // 文字列に変換し、返却
+        match String::from_utf8(buf) {
+            Ok(s) => Ok(s),
+            Err(n) => Err(Error::new(ErrorKind::Other, n))
         }
     }
 }
@@ -561,6 +793,12 @@ impl DebugInfoEntry {
     pub fn show(&self) {
         println!("[{}] {:?} {:?} {}", self.no, self.attr, self.form, self.data);
     }
+
+    /// DwAtInfo取得
+    pub fn get_at_info(&self) -> DwAtInfo { self.attr.clone() }
+
+    /// data取得
+    pub fn get_data(&self) -> &str { &self.data }
 }
 
 /// debug_info header(32bit mode)
@@ -596,6 +834,9 @@ impl CUHeader {
         println!("    abb offset  : 0x{:x}", self.abb_rev_offset);
         println!("    address size: 0x{:x}", self.address_size);
     }
+
+    /// DIE取得
+    pub fn get_dies(&self) -> &[DebugInfoEntry] { &self.dies }
 }
 
 /// debug_infoセクション
@@ -615,6 +856,9 @@ impl DebugInfoSection {
             header: vec![],
         }
     }
+
+    /// CU Header取得
+    pub fn get_header(&self) -> &[CUHeader] { &self.header }
 
     /// DebugInfoSection情報表示
     pub fn show(&self) {
@@ -714,7 +958,7 @@ impl DebugInfoSection {
         let mut read_size = 0; // lenを除いたヘッダサイズが初期値
         loop {
             // debug_infoセクションから対応するabbrev noを読み込む
-            let (size, abbrev_no) = DebugInfoSection::decode(reader).unwrap();
+            let (size, abbrev_no) = Self::decode(reader).unwrap();
             read_size += size;
 
             // すべてのDIEを読み込めば終了
@@ -847,13 +1091,13 @@ impl DebugInfoSection {
                     }
                     DwFormInfo::Sdata => {
                         // sUEB128方式でdebug_infoセクションに格納
-                        let (size, data) = DebugInfoSection::decode(reader).unwrap();
+                        let (size, data) = Self::decode(reader).unwrap();
                         read_size += size;
                         data.to_string()
                     }
                     DwFormInfo::Udata => {
                         // uUEB128方式でdebug_infoセクションに格納
-                        let (size, data) = DebugInfoSection::decode(reader).unwrap();
+                        let (size, data) = Self::decode(reader).unwrap();
                         read_size += size;
                         data.to_string()
                     }
@@ -876,7 +1120,7 @@ impl DebugInfoSection {
                     }
                     DwFormInfo::Exprloc => {
                         // uUEB128方式でdebug_infoセクションに格納
-                        let (size, data) = DebugInfoSection::decode(reader).unwrap();
+                        let (size, data) = Self::decode(reader).unwrap();
 
                         // この後に、exprlocで指定されたバイト数を読み込む
                         let mut buf = vec![0; data as usize];
@@ -927,6 +1171,7 @@ impl DebugInfoSection {
 /// Dwarf情報
 pub struct Dwarf {
     debug_info: DebugInfoSection,
+    debug_line: Vec<DebugLineSection>,
 }
 
 impl ULEB128 for Dwarf {}
@@ -935,12 +1180,14 @@ impl Dwarf {
     pub fn new() -> Self {
         Dwarf {
             debug_info: DebugInfoSection::new(),
+            debug_line: vec![],
         }
     }
 
     /// debug情報表示
     pub fn show(&self) {
         self.debug_info.show();
+        self.debug_line.iter().for_each(|d| d.show());
     }
 
     /// debug_infoロード
@@ -964,6 +1211,37 @@ impl Dwarf {
         let mut reader = BufReader::new(f);
         self.debug_info.load(&mut reader, &debug_info_sec, &abbrev_header, &debug_str)?;
 
+        // debug_lineセクションロード
+        self.load_debug_line(path, header)?;
+
+        Ok(())
+    }
+
+    /// load debug_line section
+    fn load_debug_line(&mut self, path: &str, header: &[ElfSecHeader]) -> Result<()> {
+        let line_h = match self.search_debug_line(&header) {
+            Some(h) => h,
+            _ => return Err(Error::new(ErrorKind::NotFound, "Not found debug_line section header"))
+        };
+
+        // stmt_listを抽出
+        for cu_h in self.debug_info.get_header() {
+            let stmt_list = cu_h.get_dies()
+                                .iter()
+                                .filter(|die| die.get_at_info() == DwAtInfo::StmtList)
+                                .collect::<Vec<&DebugInfoEntry>>();
+            // stmtに紐付いたdebug_lineセクションをロード
+            for stmt in stmt_list {
+                let mut line = DebugLineSection::new(line_h.get_offset());
+                match stmt.get_data().parse::<u64>() {
+                    Ok(offset) => line.load(path, offset)?,
+                    Err(e) => panic!("[load_debug_line] cannot parse offset ({:?})", e)
+                };
+                // ロードした情報を保存
+                self.debug_line.push(line)
+            }
+        }
+
         Ok(())
     }
 
@@ -980,6 +1258,11 @@ impl Dwarf {
     /// search debug_str section
     fn search_debug_str<'a>(&self, header: &'a [ElfSecHeader]) -> Option<&'a ElfSecHeader> {
         header.iter().find(|s| s.get_name() == ".debug_str")
+    }
+
+    /// search debug_line section
+    fn search_debug_line<'a>(&self, header: &'a [ElfSecHeader]) -> Option<&'a ElfSecHeader> {
+        header.iter().find(|s| s.get_name() == ".debug_line")
     }
 }
 
