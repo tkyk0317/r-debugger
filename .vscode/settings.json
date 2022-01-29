@@ -1,0 +1,21 @@
+{
+    "cSpell.words": [
+        "canonicalize",
+        "execv",
+        "Exprloc",
+        "filesz",
+        "memsz",
+        "paddr",
+        "ptrace",
+        "rtracer",
+        "Sdata",
+        "stracer",
+        "syscall",
+        "traceme",
+        "Udata",
+        "unistd",
+        "vaddr",
+        "waitpid",
+        "Xword"
+    ]
+}

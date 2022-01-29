@@ -1,27 +1,48 @@
-.PHONY: all
-all:
-	@cargo b
-	@cd sample && clang++ -g test.cpp main.cpp -o test
-	@cd ..
+.PHONY: docker-build
+docker-build:
+	@ docker build -t r-debugger-dev .
 
-.PHONY: strace
-strace: all
-	@./target/debug/r-debugger trace ./sample/test
-
-.PHONY: dbg
-dbg: all
-	@RUST_BACKTRACE=1 ./target/debug/r-debugger dbg ./sample/test
-
-.PHONY: clippy
-clippy:
-	@cargo clean -p r-debugger
-	@cargo clippy
-
-.PHONY: clean
-clean:
-	@cd sample && rm -rf ./test
-	@cargo clean
+.PHONY: build
+build: docker-build
+	@ docker run \
+		--mount type=volume,src=r-debugger-dev,target=/app/target \
+		-t \
+		--rm \
+		r-debugger-dev \
+		cargo b
 
 .PHONY: test
-test: clippy
-	@cargo test
+test: docker-build
+	@ docker run \
+		--mount type=volume,src=r-debugger-dev-rust,target=/app/target \
+		-t \
+		--rm \
+		r-debugger-dev \
+		cargo t
+	
+.PHONY: strace
+strace: build
+	@ docker run \
+		--mount type=volume,src=r-debugger-dev-rust,target=/app/target \
+		-t \
+		--rm \
+		r-debugger-dev \
+		cargo r -- trace ./sample/test
+
+.PHONY: dbg
+dbg: build
+	@ docker run \
+		--mount type=volume,src=r-debugger-dev-rust,target=/app/target \
+		-t \
+		--rm \
+		r-debugger-dev \
+		cargo r -- dbg ./sample/test
+
+.PHONY: clippy
+clippy: docker-build
+	@ docker run \
+		--mount type=volume,src=r-debugger-dev-rust,target=/app/target \
+		-t \
+		--rm \
+		r-debugger-dev \
+		cargo clippy

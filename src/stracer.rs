@@ -1,19 +1,17 @@
+use nix::sys::ptrace::{getregs, setoptions, syscall, Options};
 use nix::sys::wait::*;
-use nix::unistd::{ Pid };
-use nix::sys::ptrace::{ setoptions, syscall, getregs, Options };
+use nix::unistd::Pid;
 
 // システムコールトレーサー
 pub struct Tracer {
-    pid: Pid
+    pid: Pid,
 }
 
 /// strace実装
 impl Tracer {
     /// コンストラクタ
     pub fn new(target_pid: Pid) -> Self {
-        Tracer {
-            pid: target_pid
-        }
+        Tracer { pid: target_pid }
     }
 
     /// システムコールトレース
@@ -25,7 +23,10 @@ impl Tracer {
             match nix::sys::wait::waitpid(self.pid, None).expect("wait child process failed") {
                 // 子プロセスからのシグナル待ち
                 WaitStatus::Exited(pid, status) => {
-                    println!("[trace_syscall] exit child process: pid={:?}, status={:?}", pid, status);
+                    println!(
+                        "[trace_syscall] exit child process: pid={:?}, status={:?}",
+                        pid, status
+                    );
                     break;
                 }
                 WaitStatus::PtraceSyscall(pid) => {
@@ -37,12 +38,19 @@ impl Tracer {
                 }
                 WaitStatus::Stopped(pid, status) => {
                     // PTRACE_TRACESYSGOODを設定し、SIGTRAPと区別する
-                    println!("[trace_syscall] stopped : pid={:?}, status={:?}", pid, status);
+                    println!(
+                        "[trace_syscall] stopped : pid={:?}, status={:?}",
+                        pid, status
+                    );
                     setoptions(pid, Options::PTRACE_O_TRACESYSGOOD).expect("failed setoptions");
                     syscall(pid, None).expect("failed syscall");
                 }
-                WaitStatus::Signaled(pid, sig, _) => println!("[trace_syscall] recv signal : pid={:?}, sig={:?}", pid, sig),
-                WaitStatus::PtraceEvent(pid, sig, _) => println!("[trace_syscall] ptrace event: pid={:?}, sig={:?}", pid, sig),
+                WaitStatus::Signaled(pid, sig, _) => {
+                    println!("[trace_syscall] recv signal : pid={:?}, sig={:?}", pid, sig)
+                }
+                WaitStatus::PtraceEvent(pid, sig, _) => {
+                    println!("[trace_syscall] ptrace event: pid={:?}, sig={:?}", pid, sig)
+                }
                 WaitStatus::Continued(pid) => println!("[trace_syscall] continued : pid={:?}", pid),
                 WaitStatus::StillAlive => println!("[trace_syscall] Still Alive"),
             }
@@ -87,10 +95,9 @@ impl Tracer {
             libc::SYS_exit => "exit",
             libc::SYS_exit_group => "exit_group",
             libc::SYS_openat => "openat",
-            libc::SYS_clock_nanosleep  => "clock_nanosleep",
+            libc::SYS_clock_nanosleep => "clock_nanosleep",
             libc::SYS_nanosleep => "nanosleep",
             _ => "unknown system call",
         }
     }
 }
-

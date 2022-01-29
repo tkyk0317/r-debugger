@@ -1,6 +1,8 @@
+#![allow(dead_code)]
+
 use std::fs::File;
-use std::io::{Read, BufReader, SeekFrom, Seek, Result, Error, ErrorKind};
-use symbolic_demangle::{ demangle };
+use std::io::{BufReader, Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use symbolic_demangle::demangle;
 
 use super::dwarf::Dwarf;
 
@@ -58,16 +60,16 @@ impl ElfHeader {
 }
 
 // ELFプログラムヘッダー
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 struct ElfProgHeader {
-  p_type: Elf64Word,
-  p_flags: Elf64Word,
-  p_offset: Elf64Offset,
-  p_vaddr: Elf64Addr,
-  p_paddr: Elf64Addr,
-  p_filesz: Elf64Xword,
-  p_memsz: Elf64Xword,
-  p_align: Elf64Xword,
+    p_type: Elf64Word,
+    p_flags: Elf64Word,
+    p_offset: Elf64Offset,
+    p_vaddr: Elf64Addr,
+    p_paddr: Elf64Addr,
+    p_filesz: Elf64Xword,
+    p_memsz: Elf64Xword,
+    p_align: Elf64Xword,
 }
 
 /// ELFプログラムヘッダー
@@ -88,7 +90,7 @@ impl ElfProgHeader {
 }
 
 // ELFセクションヘッダー
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct ElfSecHeader {
     sh_name: Elf64Word,
     sh_type: Elf64Word,
@@ -106,11 +108,17 @@ pub struct ElfSecHeader {
 
 impl ElfSecHeader {
     /// セクション名取得
-    pub fn get_name(&self) -> &str { &self.sh_rname }
+    pub fn get_name(&self) -> &str {
+        &self.sh_rname
+    }
     /// セクションオフセット取得
-    pub fn get_offset(&self) -> Elf64Offset { self.sh_offset }
+    pub fn get_offset(&self) -> Elf64Offset {
+        self.sh_offset
+    }
     /// サイズ取得
-    pub fn get_size(&self) -> Elf64Xword { self.sh_size }
+    pub fn get_size(&self) -> Elf64Xword {
+        self.sh_size
+    }
 }
 
 // SH Type
@@ -157,7 +165,7 @@ impl ElfSecHeader {
 }
 
 // シンボルbind
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum StBind {
     Unknown, // 初期値
     Local,   // 0
@@ -166,16 +174,16 @@ enum StBind {
 }
 
 // シンボルType
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum StType {
-    Unknown,  // 初期値
-    Notype,   // 0
-    Object,   // 1
-    Func,     // 2
+    Unknown, // 初期値
+    Notype,  // 0
+    Object,  // 1
+    Func,    // 2
 }
 
 // シンボルテーブル
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct SymTbl {
     st_name: Elf64Word,
     st_info: u8,
@@ -259,16 +267,16 @@ impl Elf64 {
 
     /// Functionシンボルサーチ
     pub fn search_func_sym(&self, sym_name: &str) -> Option<&SymTbl> {
-        self.sym_tbl.iter().find(|sym| {
-            *sym_name == demangle(&sym.st_rname) && sym.st_type == StType::Func
-        })
+        self.sym_tbl
+            .iter()
+            .find(|sym| *sym_name == demangle(&sym.st_rname) && sym.st_type == StType::Func)
     }
 
     /// Variableシンボルサーチ
     pub fn search_var_sym(&self, sym_name: &str) -> Option<&SymTbl> {
-        self.sym_tbl.iter().find(|sym| {
-            *sym_name == demangle(&sym.st_rname) && sym.st_type == StType::Object
-        })
+        self.sym_tbl
+            .iter()
+            .find(|sym| *sym_name == demangle(&sym.st_rname) && sym.st_type == StType::Object)
     }
 
     /// ELFヘッダー読み込み
@@ -331,8 +339,10 @@ impl Elf64 {
         self.header.e_shstrndx = u16::from_le_bytes(half_word);
 
         // プログラムヘッダー、セクションヘッダー数が判明したので、リサイズ
-        self.prog_header.resize(self.header.e_phnum as usize, ElfProgHeader::new());
-        self.sec_header.resize(self.header.e_shnum as usize, ElfSecHeader::new());
+        self.prog_header
+            .resize(self.header.e_phnum as usize, ElfProgHeader::new());
+        self.sec_header
+            .resize(self.header.e_shnum as usize, ElfSecHeader::new());
 
         Ok(())
     }
@@ -418,7 +428,7 @@ impl Elf64 {
 
             // sh_addralign
             reader.read_exact(&mut word64)?;
-            self.sec_header[i as usize].sh_addralign= u64::from_le_bytes(word64);
+            self.sec_header[i as usize].sh_addralign = u64::from_le_bytes(word64);
 
             // sh_entsize
             reader.read_exact(&mut word64)?;
@@ -446,14 +456,15 @@ impl Elf64 {
         let strtab_buf = self.read_strtab(reader)?;
 
         // symtab位置までSeek
-        let symtab = match
-            self.sec_header
-                .iter()
-                .filter(|s| self.to_shtype(s.sh_type) == ShType::ShmTab)
-                .collect::<Vec<&ElfSecHeader>>()
-                .pop() {
+        let symtab = match self
+            .sec_header
+            .iter()
+            .filter(|s| self.to_shtype(s.sh_type) == ShType::ShmTab)
+            .collect::<Vec<&ElfSecHeader>>()
+            .pop()
+        {
             Some(header) => header,
-            _ => return Err(Error::new(ErrorKind::NotFound, "Not found symtab"))
+            _ => return Err(Error::new(ErrorKind::NotFound, "Not found symtab")),
         };
         reader.seek(SeekFrom::Start(symtab.sh_offset))?;
 
@@ -506,14 +517,17 @@ impl Elf64 {
     /// strtabセクションデータリード
     fn read_strtab(&self, reader: &mut BufReader<File>) -> Result<Vec<u8>> {
         // .strtabセクションをサーチ(shstrtabは除外する)
-        let strtab = match
-            self.sec_header
-                .iter()
-                .filter(|s| self.to_shtype(s.sh_type) == ShType::StrTab && s.sh_no != self.header.e_shstrndx)
-                .collect::<Vec<&ElfSecHeader>>()
-                .pop() {
+        let strtab = match self
+            .sec_header
+            .iter()
+            .filter(|s| {
+                self.to_shtype(s.sh_type) == ShType::StrTab && s.sh_no != self.header.e_shstrndx
+            })
+            .collect::<Vec<&ElfSecHeader>>()
+            .pop()
+        {
             Some(header) => header,
-            _ => return Err(Error::new(ErrorKind::NotFound, "Not found strtab"))
+            _ => return Err(Error::new(ErrorKind::NotFound, "Not found strtab")),
         };
 
         // strtab情報をリード
@@ -527,14 +541,17 @@ impl Elf64 {
     /// strtabセクションデータリード（for section name）
     fn read_strtab_of_sec(&self, reader: &mut BufReader<File>) -> Result<Vec<u8>> {
         // .strtabセクションをサーチ(shstrtab)
-        let strtab = match
-            self.sec_header
-                .iter()
-                .filter(|s| self.to_shtype(s.sh_type) == ShType::StrTab && s.sh_no == self.header.e_shstrndx)
-                .collect::<Vec<&ElfSecHeader>>()
-                .pop() {
+        let strtab = match self
+            .sec_header
+            .iter()
+            .filter(|s| {
+                self.to_shtype(s.sh_type) == ShType::StrTab && s.sh_no == self.header.e_shstrndx
+            })
+            .collect::<Vec<&ElfSecHeader>>()
+            .pop()
+        {
             Some(header) => header,
-            _ => return Err(Error::new(ErrorKind::NotFound, "Not found strtab"))
+            _ => return Err(Error::new(ErrorKind::NotFound, "Not found strtab")),
         };
 
         // strtab情報をリード
@@ -548,16 +565,16 @@ impl Elf64 {
     /// SH_TYPE変換
     fn to_shtype(&self, t: Elf64Word) -> ShType {
         match t {
-            0  => ShType::Null,
-            1  => ShType::Progbit,
-            2  => ShType::ShmTab,
-            3  => ShType::StrTab,
-            4  => ShType::Rela,
-            5  => ShType::Hash,
-            6  => ShType::Dynamic,
-            7  => ShType::Note,
-            8  => ShType::Nobits,
-            9  => ShType::Rel,
+            0 => ShType::Null,
+            1 => ShType::Progbit,
+            2 => ShType::ShmTab,
+            3 => ShType::StrTab,
+            4 => ShType::Rela,
+            5 => ShType::Hash,
+            6 => ShType::Dynamic,
+            7 => ShType::Note,
+            8 => ShType::Nobits,
+            9 => ShType::Rel,
             10 => ShType::Shlib,
             11 => ShType::DynSym,
             0x7000_0000 => ShType::LoProc,

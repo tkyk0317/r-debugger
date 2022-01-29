@@ -13,13 +13,18 @@ pub struct AdrFromRel {
 impl AdrFromRel {
     /// コンストラクタ
     pub fn new(b_addr: usize, address: usize) -> Self {
-        AdrFromRel { base: b_addr, addr: address }
+        AdrFromRel {
+            base: b_addr,
+            addr: address,
+        }
     }
 }
 
 impl AddressTrait for AdrFromRel {
     /// アドレス取得
-    fn get(&self) -> usize { self.base + self.addr }
+    fn get(&self) -> usize {
+        self.base + self.addr
+    }
 }
 
 /// 絶対アドレス
@@ -37,5 +42,7 @@ impl AdrFromAbs {
 
 impl AddressTrait for AdrFromAbs {
     /// アドレス取得
-    fn get(&self) -> usize { self.addr }
+    fn get(&self) -> usize {
+        self.addr
+    }
 }

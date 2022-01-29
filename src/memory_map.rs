@@ -1,7 +1,7 @@
+use nix::unistd::Pid;
+use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::collections::HashMap;
-use nix::unistd::{ Pid };
 
 // メモリマップデータ
 #[derive(Debug, Clone)]
@@ -14,7 +14,7 @@ pub struct MapInfo {
 // メモリーマップ
 pub struct MemoryMap {
     maps_path: String,
-    maps: HashMap<String, Vec<MapInfo>>
+    maps: HashMap<String, Vec<MapInfo>>,
 }
 
 /// メモリマップ実装
@@ -23,7 +23,7 @@ impl MemoryMap {
     pub fn new(pid: Pid) -> Self {
         MemoryMap {
             maps_path: format!("/proc/{}/maps", pid),
-            maps: HashMap::new()
+            maps: HashMap::new(),
         }
     }
 
@@ -32,23 +32,20 @@ impl MemoryMap {
     /// 対象プログラムのスタートアドレス
     pub fn load(&mut self) -> &HashMap<String, Vec<MapInfo>> {
         let content = BufReader::new(
-            fs::File::open(&self.maps_path).unwrap_or_else(|p| panic!("cannot open file: {}", p))
+            fs::File::open(&self.maps_path).unwrap_or_else(|p| panic!("cannot open file: {}", p)),
         );
 
         // mapsファイルを走査し、各ファイルごとのメモリマップを登録
         for l in content.lines() {
             let line = l.unwrap();
-            let s_line = line.split_whitespace()
-                             .collect::<Vec<&str>>();
+            let s_line = line.split_whitespace().collect::<Vec<&str>>();
 
             // ファイル名をキーとして、HashMapへ登録
-            let key =
-                if s_line.len() >= 6 {
-                    s_line[5].to_string()
-                }
-                else {
-                    "none".to_string()
-                };
+            let key = if s_line.len() >= 6 {
+                s_line[5].to_string()
+            } else {
+                "none".to_string()
+            };
 
             // 開始アドレスやパーミッションを取り出す
             let map_info = self.maps.get_mut(&key);
@@ -56,7 +53,7 @@ impl MemoryMap {
             let new_map_info = MapInfo {
                 start_address: addr_range[0].to_string(),
                 end_address: addr_range[1].to_string(),
-                permission: s_line[1].to_string()
+                permission: s_line[1].to_string(),
             };
 
             // 既に登録されている場合はMapInfoを追加

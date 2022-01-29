@@ -1,11 +1,11 @@
 use std::fs::File;
-use std::io::{Read, BufReader, Seek, SeekFrom, Result, Error, ErrorKind};
+use std::io::{BufReader, Error, ErrorKind, Read, Result, Seek, SeekFrom};
 
 use crate::elf::elf64::ElfSecHeader;
 use crate::elf::leb128::ULEB128;
 
 /// DW_TAG情報
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 enum DwTagInfo {
     Unknown, // 不明
     ArrayType,
@@ -75,7 +75,7 @@ enum DwTagInfo {
 }
 
 /// DW_AT情報
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum DwAtInfo {
     Unknown, // 不明
     Sibling,
@@ -181,7 +181,7 @@ enum DwAtInfo {
 /// DW_FORM情報
 #[derive(Debug)]
 enum DwFormInfo {
-    Unknown, // 不明
+    Unknown(u64), // 不明
     Addr,
     Block2,
     Block4,
@@ -216,16 +216,16 @@ trait DwInfo {
     /// DW_TAGコンバート
     fn to_dw_tag(tag: u64) -> DwTagInfo {
         match tag {
-            0x1  => DwTagInfo::ArrayType,
-            0x2  => DwTagInfo::ClassType,
-            0x3  => DwTagInfo::EntryPoint,
-            0x4  => DwTagInfo::EnumerationType,
-            0x5  => DwTagInfo::FormalParamter,
-            0x8  => DwTagInfo::ImportedDeclaration,
-            0xA  => DwTagInfo::Label,
-            0xB  => DwTagInfo::LexicalBlock,
-            0xD  => DwTagInfo::Member,
-            0xF  => DwTagInfo::PointerType,
+            0x1 => DwTagInfo::ArrayType,
+            0x2 => DwTagInfo::ClassType,
+            0x3 => DwTagInfo::EntryPoint,
+            0x4 => DwTagInfo::EnumerationType,
+            0x5 => DwTagInfo::FormalParamter,
+            0x8 => DwTagInfo::ImportedDeclaration,
+            0xA => DwTagInfo::Label,
+            0xB => DwTagInfo::LexicalBlock,
+            0xD => DwTagInfo::Member,
+            0xF => DwTagInfo::PointerType,
             0x10 => DwTagInfo::ReferenceType,
             0x11 => DwTagInfo::CompileUnit,
             0x12 => DwTagInfo::StringType,
@@ -278,7 +278,7 @@ trait DwInfo {
             0x43 => DwTagInfo::TemplateAlias,
             0x4080 => DwTagInfo::LoUser,
             0xFFFF => DwTagInfo::HiUser,
-            _ =>  DwTagInfo::Unknown,
+            _ => DwTagInfo::Unknown,
         }
     }
 
@@ -286,18 +286,18 @@ trait DwInfo {
     fn to_has_child(c: u8) -> &'static str {
         match c {
             1 => "has children",
-            _ => "no children"
+            _ => "no children",
         }
     }
 
     /// DW_ATコンバート
     fn to_dw_at(at: u64) -> DwAtInfo {
         match at {
-            0x0  => DwAtInfo::End,
-            0x1  => DwAtInfo::Sibling,
-            0x2  => DwAtInfo::Location,
-            0x3  => DwAtInfo::Name,
-            0x9  => DwAtInfo::Ordering,
+            0x0 => DwAtInfo::End,
+            0x1 => DwAtInfo::Sibling,
+            0x2 => DwAtInfo::Location,
+            0x3 => DwAtInfo::Name,
+            0x9 => DwAtInfo::Ordering,
             0xA => DwAtInfo::SubscrData,
             0xB => DwAtInfo::ByteSize,
             0xC => DwAtInfo::BitOffset,
@@ -389,27 +389,27 @@ trait DwInfo {
             0x6C => DwAtInfo::ConstExpr,
             0x6D => DwAtInfo::EnumClass,
             0x6E => DwAtInfo::LinkageName,
-            _ =>  DwAtInfo::Unknown,
+            _ => DwAtInfo::Unknown,
         }
     }
 
     /// DW_FROMコンバート
     fn to_dw_form(form: u64) -> DwFormInfo {
         match form {
-            0x0  => DwFormInfo::End,
-            0x1  => DwFormInfo::Addr,
-            0x3  => DwFormInfo::Block2,
-            0x4  => DwFormInfo::Block4,
-            0x5  => DwFormInfo::Data2,
-            0x6  => DwFormInfo::Data4,
-            0x7  => DwFormInfo::Data8,
+            0x0 => DwFormInfo::End,
+            0x1 => DwFormInfo::Addr,
+            0x3 => DwFormInfo::Block2,
+            0x4 => DwFormInfo::Block4,
+            0x5 => DwFormInfo::Data2,
+            0x6 => DwFormInfo::Data4,
+            0x7 => DwFormInfo::Data8,
             0x8 => DwFormInfo::String,
             0x9 => DwFormInfo::Block,
             0xA => DwFormInfo::Block1,
             0xB => DwFormInfo::Data1,
             0xC => DwFormInfo::Flag,
             0xD => DwFormInfo::Sdata,
-            0xE  => DwFormInfo::Strp,
+            0xE => DwFormInfo::Strp,
             0xF => DwFormInfo::Udata,
             0x10 => DwFormInfo::RefAddr,
             0x11 => DwFormInfo::Ref1,
@@ -422,7 +422,7 @@ trait DwInfo {
             0x18 => DwFormInfo::Exprloc,
             0x19 => DwFormInfo::FlagPresent,
             0x20 => DwFormInfo::RefSig8,
-            _ =>  DwFormInfo::Unknown,
+            _ => DwFormInfo::Unknown(form),
         }
     }
 }
@@ -445,7 +445,7 @@ impl DebugAbbRevRecord {
             tag: 0,
             has_child: 0,
             attr_name: vec![],
-            attr_form: vec![]
+            attr_form: vec![],
         }
     }
 
@@ -461,30 +461,32 @@ impl DebugAbbRevRecord {
             println!("    {:?} {:?}", Self::to_dw_at(*n), Self::to_dw_form(*f));
         }
     }
-
 }
 
 /// abbrev section
 #[derive(Debug)]
 struct DebugAbbRevSection {
-    abb_rev: Vec<DebugAbbRevRecord>
+    abb_rev: Vec<DebugAbbRevRecord>,
 }
 
 impl ULEB128 for DebugAbbRevSection {}
 impl DebugAbbRevSection {
     /// コンストラクタ
     pub fn new() -> Self {
-        DebugAbbRevSection {
-            abb_rev: vec![]
-        }
+        DebugAbbRevSection { abb_rev: vec![] }
     }
 
     /// abbrev record取得
-    pub fn get_record(&self, i: usize) -> &DebugAbbRevRecord { &self.abb_rev[i] }
+    pub fn get_record(&self, i: usize) -> &DebugAbbRevRecord {
+        &self.abb_rev[i]
+    }
 
     /// AbbRevセクションロード
     pub fn load(
-        &mut self, reader: &mut BufReader<File>, sec_header: &ElfSecHeader, abbrev_offset: u64
+        &mut self,
+        reader: &mut BufReader<File>,
+        sec_header: &ElfSecHeader,
+        abbrev_offset: u64,
     ) -> Result<()> {
         // debug_abbrevセクションへ移動
         let offset = sec_header.get_offset() + abbrev_offset;
@@ -586,7 +588,7 @@ impl DebugLineHeader {
             opcode_base: 0,
             standard_opcode_len: vec![],
             inc_dirs: vec![],
-            file_names: vec![]
+            file_names: vec![],
         }
     }
 }
@@ -594,7 +596,7 @@ impl DebugLineHeader {
 /// debug_lineセクション
 #[derive(Debug)]
 struct DebugLineSection {
-    offset: u64, // セクションデータ先頭へのオフセット
+    offset: u64,                     // セクションデータ先頭へのオフセット
     cu_header: Vec<DebugLineHeader>, // CU毎に定義されているヘッダー情報
 }
 
@@ -639,7 +641,7 @@ impl DebugLineSection {
             println!("    ope code:");
             for (i, ope) in h.standard_opcode_len.iter().enumerate() {
                 println!("    opecode {}: has {} argment", i + 1, ope);
-            };
+            }
             println!();
             println!("    directory entry:");
             for (i, entry) in h.inc_dirs.iter().enumerate() {
@@ -701,11 +703,14 @@ impl DebugLineSection {
         header.opcode_base = u8::from_le_bytes(byte);
 
         // standard opecode len([opecode base - 1]個分)
-        (0..header.opcode_base - 1).for_each(|_| {
-            if let Ok(arg) = Self::decode(reader) {
-                header.standard_opcode_len.push(arg.1);
-            }
-        });
+        // 0の場合もあり得る
+        if header.opcode_base != 0 {
+            (0..header.opcode_base - 1).for_each(|_| {
+                if let Ok(arg) = Self::decode(reader) {
+                    header.standard_opcode_len.push(arg.1);
+                }
+            });
+        }
 
         // include directories
         loop {
@@ -713,7 +718,9 @@ impl DebugLineSection {
             let s = self.get_null_term_str(reader)?;
 
             // 最後のエントリーはNULL文字
-            if s.is_empty() { break; }
+            if s.is_empty() {
+                break;
+            }
 
             // include directory保存
             header.inc_dirs.push(s);
@@ -726,17 +733,25 @@ impl DebugLineSection {
             let s = self.get_null_term_str(reader)?;
 
             // 最後のエントリーはNULL文字
-            if s.is_empty() { break; }
+            if s.is_empty() {
+                break;
+            }
             f.name = s;
 
             // directory entry
-            if let Ok(entry) = Self::decode(reader) { f.dir_entry = entry.1; }
+            if let Ok(entry) = Self::decode(reader) {
+                f.dir_entry = entry.1;
+            }
 
             // last modification
-            if let Ok(modify) = Self::decode(reader) { f.last_modify = modify.1; }
+            if let Ok(modify) = Self::decode(reader) {
+                f.last_modify = modify.1;
+            }
 
             // file size
-            if let Ok(size) = Self::decode(reader) { f.size = size.1; }
+            if let Ok(size) = Self::decode(reader) {
+                f.size = size.1;
+            }
 
             // file name情報を保存
             header.file_names.push(f)
@@ -755,14 +770,16 @@ impl DebugLineSection {
             let c = u8::from_le_bytes(byte);
 
             // nullチェック
-            if c == 0 { break; }
+            if c == 0 {
+                break;
+            }
             buf.push(c);
         }
 
         // 文字列に変換し、返却
         match String::from_utf8(buf) {
             Ok(s) => Ok(s),
-            Err(n) => Err(Error::new(ErrorKind::Other, n))
+            Err(n) => Err(Error::new(ErrorKind::Other, n)),
         }
     }
 }
@@ -784,31 +801,38 @@ impl DebugInfoEntry {
             no: n,
             attr: Self::to_dw_at(a),
             form: Self::to_dw_form(f),
-            data: s.to_string()
+            data: s.to_string(),
         }
     }
 
     /// DIE情報表示
     #[allow(dead_code)]
     pub fn show(&self) {
-        println!("[{}] {:?} {:?} {}", self.no, self.attr, self.form, self.data);
+        println!(
+            "[{}] {:?} {:?} {}",
+            self.no, self.attr, self.form, self.data
+        );
     }
 
     /// DwAtInfo取得
-    pub fn get_at_info(&self) -> DwAtInfo { self.attr.clone() }
+    pub fn get_at_info(&self) -> DwAtInfo {
+        self.attr.clone()
+    }
 
     /// data取得
-    pub fn get_data(&self) -> &str { &self.data }
+    pub fn get_data(&self) -> &str {
+        &self.data
+    }
 }
 
 /// debug_info header(32bit mode)
 #[derive(Debug)]
 struct CUHeader {
-    len: u32,                  // debug_info length(for 32bit dwarf format. 0xFFFF_FFFF when 64bit dwarf mode)
-    actual_len: u64,           // debug_info length(for 64bit mode)
-    version: u16,              // dwarf version
-    abb_rev_offset: u32,       // debug_abbrev section offset in .debug_abbrev
-    address_size: u8,          // 1-byte unsigned integer representing the size in bytes of an address on the target architecture(pointer size)
+    len: u32, // debug_info length(for 32bit dwarf format. 0xFFFF_FFFF when 64bit dwarf mode)
+    actual_len: u64, // debug_info length(for 64bit mode)
+    version: u16, // dwarf version
+    abb_rev_offset: u32, // debug_abbrev section offset in .debug_abbrev
+    address_size: u8, // 1-byte unsigned integer representing the size in bytes of an address on the target architecture(pointer size)
     dies: Vec<DebugInfoEntry>, // CUに紐付いたDIEを保存
 }
 
@@ -821,7 +845,7 @@ impl CUHeader {
             version: 0,
             abb_rev_offset: 0,
             address_size: 0,
-            dies: vec![]
+            dies: vec![],
         }
     }
 
@@ -836,7 +860,9 @@ impl CUHeader {
     }
 
     /// DIE取得
-    pub fn get_dies(&self) -> &[DebugInfoEntry] { &self.dies }
+    pub fn get_dies(&self) -> &[DebugInfoEntry] {
+        &self.dies
+    }
 }
 
 /// debug_infoセクション
@@ -852,13 +878,13 @@ impl ULEB128 for DebugInfoSection {}
 impl DebugInfoSection {
     /// コンストラクタ
     pub fn new() -> Self {
-        DebugInfoSection {
-            header: vec![],
-        }
+        DebugInfoSection { header: vec![] }
     }
 
     /// CU Header取得
-    pub fn get_header(&self) -> &[CUHeader] { &self.header }
+    pub fn get_header(&self) -> &[CUHeader] {
+        &self.header
+    }
 
     /// DebugInfoSection情報表示
     pub fn show(&self) {
@@ -876,7 +902,7 @@ impl DebugInfoSection {
         reader: &mut BufReader<File>,
         info_h: &ElfSecHeader,
         abbrev_h: &ElfSecHeader,
-        str_h: &ElfSecHeader
+        str_h: &ElfSecHeader,
     ) -> Result<()> {
         // debug_str読み込み
         reader.seek(SeekFrom::Start(str_h.get_offset()))?;
@@ -898,7 +924,8 @@ impl DebugInfoSection {
             read_size += 4;
 
             // load actual len when 64bit mode
-            if cu_h.len == 0xFFFF_FFFF { // 64bit mode
+            if cu_h.len == 0xFFFF_FFFF {
+                // 64bit mode
                 let mut word64 = [0; 8];
                 reader.read_exact(&mut word64)?;
                 cu_h.actual_len = u64::from_le_bytes(word64);
@@ -925,7 +952,7 @@ impl DebugInfoSection {
             // 対応するabbrevをロード
             let mut abbrev = DebugAbbRevSection::new();
             let offset = cu_h.abb_rev_offset;
-            abbrev.load(reader, &abbrev_h, offset as u64)?;
+            abbrev.load(reader, abbrev_h, offset as u64)?;
 
             // abbrevを読み取りながら、debug_infoセクションをロードしていく
             reader.seek(SeekFrom::Start(info_h.get_offset() + read_size))?;
@@ -952,7 +979,7 @@ impl DebugInfoSection {
         reader: &mut BufReader<File>,
         cu_h: &mut CUHeader,
         abbrev: &DebugAbbRevSection,
-        str_buf: &[u8]
+        str_buf: &[u8],
     ) -> u64 {
         // DIEをロード
         let mut read_size = 0; // lenを除いたヘッダサイズが初期値
@@ -963,7 +990,9 @@ impl DebugInfoSection {
 
             // すべてのDIEを読み込めば終了
             let end = (read_size + 7) as u32;
-            if cu_h.len == end { break; }
+            if cu_h.len == end {
+                break;
+            }
 
             // abbrev_no=ゼロならば、nullエントリーなので次のエントリーへ
             if 0 == abbrev_no {
@@ -982,7 +1011,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 4];
                         let offset = match reader.read_exact(&mut buf) {
                             Ok(_) => u32::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_str {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_str {:?}",
+                                e
+                            ),
                         };
                         read_size += 4;
 
@@ -994,7 +1026,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 8];
                         let addr = match reader.read_exact(&mut buf) {
                             Ok(_) => u64::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 8;
                         addr.to_string()
@@ -1004,7 +1039,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 1];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u8::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 1;
                         data.to_string()
@@ -1014,7 +1052,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 2];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u16::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 2;
                         data.to_string()
@@ -1024,7 +1065,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 4];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u32::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 4;
                         data.to_string()
@@ -1034,7 +1078,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 8];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u64::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 8;
                         data.to_string()
@@ -1044,7 +1091,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 4];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u32::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 4;
                         data.to_string()
@@ -1054,7 +1104,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 1];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u8::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 1;
                         data.to_string()
@@ -1064,7 +1117,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 2];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u16::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 2;
                         data.to_string()
@@ -1074,7 +1130,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 4];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u32::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 4;
                         data.to_string()
@@ -1084,7 +1143,10 @@ impl DebugInfoSection {
                         let mut buf = [0; 8];
                         let data = match reader.read_exact(&mut buf) {
                             Ok(_) => u64::from_le_bytes(buf),
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
+                            Err(e) => panic!(
+                                "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                e
+                            ),
                         };
                         read_size += 8;
                         data.to_string()
@@ -1106,14 +1168,19 @@ impl DebugInfoSection {
                         let mut st: Vec<u8> = vec![];
                         let mut st_size = 0;
                         loop {
-                             let mut buf = [0; 1];
-                             let data = match reader.read_exact(&mut buf) {
-                                 Ok(_) => u8::from_le_bytes(buf),
-                                 Err(e) => panic!("[DebugInfoSection::parse] cannot read from debug_info {:?}", e)
-                             };
-                             st.push(data);
-                             st_size += 1;
-                             if data == 0 { break; }
+                            let mut buf = [0; 1];
+                            let data = match reader.read_exact(&mut buf) {
+                                Ok(_) => u8::from_le_bytes(buf),
+                                Err(e) => panic!(
+                                    "[DebugInfoSection::parse] cannot read from debug_info {:?}",
+                                    e
+                                ),
+                            };
+                            st.push(data);
+                            st_size += 1;
+                            if data == 0 {
+                                break;
+                            }
                         }
                         read_size += st_size;
                         String::from_utf8(st).unwrap()
@@ -1128,22 +1195,37 @@ impl DebugInfoSection {
                             Ok(_) => {
                                 // exprlocとそのデータサイズ分を加算
                                 read_size += size + data;
-                             }
-                            Err(e) => panic!("[DebugInfoSection::parse] cannot exprloc {:?}", e)
+                            }
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot exprloc {:?}", e),
                         }
                         data.to_string()
                     }
                     DwFormInfo::FlagPresent => {
                         // フラグが存在していることを暗黙的に示している
-                        "flag is presetn".to_string()
+                        "flag is present".to_string()
                     }
-                    DwFormInfo::End => {
-                        "value: 0".to_string()
+                    DwFormInfo::Block1 => {
+                        // 長さを読み取り、その後に続くデータをリード
+                        let mut buf = [0; 1];
+                        match reader.read_exact(&mut buf) {
+                            Ok(_) => {
+                                // サイズ分データ読み込み
+                                let size = buf[0] as usize;
+                                let mut buf = vec![0; size];
+                                reader.read_exact(&mut buf).unwrap();
+                                read_size += size as u64 + 1;
+                            }
+                            Err(e) => panic!("[DebugInfoSection::parse] cannot block1 {:?}", e),
+                        };
+                        "block1".to_string()
                     }
-                    _ => {
-                        panic!("\tnot support DW Form")
+                    DwFormInfo::End => "value: 0".to_string(),
+                    DwFormInfo::Unknown(v) => {
+                        panic!("\tunknown DW Form[0x{:x}]", v)
                     }
+                    _ => panic!("\tnot support DW Form[0x{:x}]", *form),
                 };
+
                 // DIEを生成し、保存
                 let die = DebugInfoEntry::new(abbrev_no, *at, *form, &data);
                 cu_h.dies.push(die);
@@ -1165,7 +1247,6 @@ impl DebugInfoSection {
             .collect();
         String::from_utf8(t).unwrap()
     }
-
 }
 
 /// Dwarf情報
@@ -1193,23 +1274,39 @@ impl Dwarf {
     /// debug_infoロード
     pub fn load(&mut self, path: &str, header: &[ElfSecHeader]) -> Result<()> {
         // debug_info/debug_abbrevセクションを探す
-        let debug_info_sec = match self.search_debug_info_sec(&header) {
+        let debug_info_sec = match self.search_debug_info_sec(header) {
             Some(h) => h,
-            _ => return Err(Error::new(ErrorKind::NotFound, "Not found debug_info section header"))
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "Not found debug_info section header",
+                ))
+            }
         };
-        let abbrev_header = match self.search_debug_abbrev_sec(&header) {
+        let abbrev_header = match self.search_debug_abbrev_sec(header) {
             Some(h) => h,
-            _ => return Err(Error::new(ErrorKind::NotFound, "Not found debug_abbrev section header"))
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "Not found debug_abbrev section header",
+                ))
+            }
         };
-        let debug_str = match self.search_debug_str(&header) {
+        let debug_str = match self.search_debug_str(header) {
             Some(h) => h,
-            _ => return Err(Error::new(ErrorKind::NotFound, "Not found debug_str section header"))
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "Not found debug_str section header",
+                ))
+            }
         };
 
         // debug_infoセクションロード
         let f = File::open(&path)?;
         let mut reader = BufReader::new(f);
-        self.debug_info.load(&mut reader, &debug_info_sec, &abbrev_header, &debug_str)?;
+        self.debug_info
+            .load(&mut reader, debug_info_sec, abbrev_header, debug_str)?;
 
         // debug_lineセクションロード
         self.load_debug_line(path, header)?;
@@ -1219,23 +1316,29 @@ impl Dwarf {
 
     /// load debug_line section
     fn load_debug_line(&mut self, path: &str, header: &[ElfSecHeader]) -> Result<()> {
-        let line_h = match self.search_debug_line(&header) {
+        let line_h = match self.search_debug_line(header) {
             Some(h) => h,
-            _ => return Err(Error::new(ErrorKind::NotFound, "Not found debug_line section header"))
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "Not found debug_line section header",
+                ))
+            }
         };
 
         // stmt_listを抽出
         for cu_h in self.debug_info.get_header() {
-            let stmt_list = cu_h.get_dies()
-                                .iter()
-                                .filter(|die| die.get_at_info() == DwAtInfo::StmtList)
-                                .collect::<Vec<&DebugInfoEntry>>();
+            let stmt_list = cu_h
+                .get_dies()
+                .iter()
+                .filter(|die| die.get_at_info() == DwAtInfo::StmtList)
+                .collect::<Vec<&DebugInfoEntry>>();
             // stmtに紐付いたdebug_lineセクションをロード
             for stmt in stmt_list {
                 let mut line = DebugLineSection::new(line_h.get_offset());
                 match stmt.get_data().parse::<u64>() {
                     Ok(offset) => line.load(path, offset)?,
-                    Err(e) => panic!("[load_debug_line] cannot parse offset ({:?})", e)
+                    Err(e) => panic!("[load_debug_line] cannot parse offset ({:?})", e),
                 };
                 // ロードした情報を保存
                 self.debug_line.push(line)
@@ -1265,4 +1368,3 @@ impl Dwarf {
         header.iter().find(|s| s.get_name() == ".debug_line")
     }
 }
-

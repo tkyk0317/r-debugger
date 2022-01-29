@@ -1,17 +1,17 @@
-use std::io::{self, Write, Result};
-use nix::unistd::{ Pid };
+use nix::sys::ptrace::{cont, getregs, kill, read, setregs, step, write, AddressType};
 use nix::sys::wait::*;
-use nix::sys::ptrace::{ cont, read, write, step, getregs, setregs, kill, AddressType };
+use nix::unistd::Pid;
+use std::io::{self, Result, Write};
 
+use crate::address::{AddressTrait, AdrFromAbs, AdrFromRel};
 use crate::elf::elf64::Elf64;
 use crate::memory_map::MemoryMap;
-use crate::address::{AddressTrait, AdrFromRel, AdrFromAbs};
 
 // ブレイクポイントリスト
 struct Breakpoint<'a> {
-    sym: String,    // ブレイクポイントを貼るシンボル名
-    inst: usize,    // ブレイクポイント箇所の命令列
-    addr: Box<dyn AddressTrait + 'a>,  // シンボルテーブルに記載されているアドレス
+    sym: String,                      // ブレイクポイントを貼るシンボル名
+    inst: usize,                      // ブレイクポイント箇所の命令列
+    addr: Box<dyn AddressTrait + 'a>, // シンボルテーブルに記載されているアドレス
 }
 
 // ブレイクポイント管理
@@ -23,7 +23,9 @@ struct BreakpointList<'a> {
 impl<'a> BreakpointList<'a> {
     /// コンストラクタ
     pub fn new() -> Self {
-        BreakpointList { breakpoints: vec![] }
+        BreakpointList {
+            breakpoints: vec![],
+        }
     }
 
     /// ブレイクポイント設定取得
@@ -39,7 +41,11 @@ impl<'a> BreakpointList<'a> {
             None => {
                 // ブレイクポイント登録
                 self.breakpoints.push({
-                    Breakpoint { sym: sym.to_string(), addr: Box::new(bp), inst: bp_inst }
+                    Breakpoint {
+                        sym: sym.to_string(),
+                        addr: Box::new(bp),
+                        inst: bp_inst,
+                    }
                 });
                 true
             }
@@ -105,7 +111,10 @@ impl<'a> Debugger<'a> {
             match nix::sys::wait::waitpid(self.pid, None).expect("wait child process failed") {
                 // シグナル受信による子プロセス終了
                 WaitStatus::Exited(pid, sig) => {
-                    println!("[start_dbg] exit child process: pid={:?}, sig={:?}", pid, sig);
+                    println!(
+                        "[start_dbg] exit child process: pid={:?}, sig={:?}",
+                        pid, sig
+                    );
                     break;
                 }
                 // シグナル受信による子プロセス停止
@@ -120,11 +129,15 @@ impl<'a> Debugger<'a> {
                     }
                     self.stopped_handler(sig);
                 }
-                WaitStatus::Signaled(pid, sig, _) => println!("[start_dbg] recv signal : pid={:?}, sig={:?}", pid, sig),
-                WaitStatus::PtraceEvent(pid, sig, _) => println!("[start_dbg] ptrace event: pid={:?}, sig={:?}", pid, sig),
+                WaitStatus::Signaled(pid, sig, _) => {
+                    println!("[start_dbg] recv signal : pid={:?}, sig={:?}", pid, sig)
+                }
+                WaitStatus::PtraceEvent(pid, sig, _) => {
+                    println!("[start_dbg] ptrace event: pid={:?}, sig={:?}", pid, sig)
+                }
                 WaitStatus::Continued(pid) => println!("[start_dbg] continued : pid={:?}", pid),
                 WaitStatus::StillAlive => println!("[start_dbg] Still Alive"),
-                _ => println!("[start_dbg] not support event")
+                _ => println!("[start_dbg] not support event"),
             }
             // 初回のシグナル受信をOFFへ
             first_sig = false;
@@ -136,8 +149,13 @@ impl<'a> Debugger<'a> {
         // 対象プログラムのロード先先頭アドレスを取得
         let map_info = self.memory_map.load();
         self.entry = usize::from_str_radix(
-            &map_info.get(&self.path).expect("can not read entry address")[0].start_address, 16
-        ).expect("can not parse entry ddress");
+            &map_info
+                .get(&self.path)
+                .expect("can not read entry address")[0]
+                .start_address,
+            16,
+        )
+        .expect("can not parse entry ddress");
 
         // ELFファイルロード
         self.elf.load()
@@ -190,7 +208,7 @@ impl<'a> Debugger<'a> {
                 let sym = bp_info.sym.clone();
                 self.breakpoint(self.to_sym_addr(addr), &sym);
             }
-            _ => panic!("recover_bp do not expect event")
+            _ => panic!("recover_bp do not expect event"),
         };
     }
 
@@ -205,13 +223,16 @@ impl<'a> Debugger<'a> {
             // コマンド入力受付
             let mut s = String::new();
             std::io::stdin().read_line(&mut s).ok();
-            let coms: Vec<String> = s.trim()
-                                     .split_whitespace()
-                                     .map(|e| e.parse().ok().unwrap())
-                                     .collect();
+            let coms: Vec<String> = s
+                .trim()
+                .split_whitespace()
+                .map(|e| e.parse().ok().unwrap())
+                .collect();
 
             // 空コマンドは無効
-            if coms.is_empty() { continue; }
+            if coms.is_empty() {
+                continue;
+            }
 
             // 各コマンドを実行
             match &*coms[0] {
@@ -222,7 +243,9 @@ impl<'a> Debugger<'a> {
                 // シンボルリード
                 "p" if coms.len() == 2 => self.sh_read_sym(&coms[1]),
                 // シンボル書き込み
-                "set" if coms.len() == 4 && "var" == coms[1] => self.sh_write_sym(&coms[2], &coms[3]),
+                "set" if coms.len() == 4 && "var" == coms[1] => {
+                    self.sh_write_sym(&coms[2], &coms[3])
+                }
                 // 再開
                 "c" => {
                     self.cont();
@@ -240,12 +263,12 @@ impl<'a> Debugger<'a> {
                 // レジスタ表示
                 "info" if coms.len() == 2 && "regs" == coms[1] => self.show_regs(),
                 // debugセクション情報表示
-                "info" if coms.len() == 2 && "debugsec" == coms[1] =>self.elf.show_debug(),
+                "info" if coms.len() == 2 && "debugsec" == coms[1] => self.elf.show_debug(),
                 // レジスタ書き込み
                 "set" if coms.len() == 4 && "regs" == coms[1] => self.set_regs(&coms[2], &coms[3]),
                 // 終了
                 "quit" => self.sh_quit(),
-                _ => println!("not support command: {}", coms[0])
+                _ => println!("not support command: {}", coms[0]),
             };
         }
     }
@@ -253,14 +276,14 @@ impl<'a> Debugger<'a> {
     /// シェルからのブレイクポイント設定
     fn sh_breakpoint(&mut self, sym: &str) {
         // シンボル探索
-        match self.elf.search_func_sym(&sym) {
+        match self.elf.search_func_sym(sym) {
             Some(s) => {
                 // シンボル→アドレス変換したものをブレイクポイント設定
                 let addr = s.st_value;
                 self.breakpoint(addr as usize, sym);
                 println!("Braekpoint at 0x{:x}", addr);
             }
-            _ => println!("not found symbol: {}", sym)
+            _ => println!("not found symbol: {}", sym),
         };
     }
 
@@ -275,19 +298,19 @@ impl<'a> Debugger<'a> {
     /// シェルからのシンボルリード
     fn sh_read_sym(&self, sym: &str) {
         // シンボル探索
-        match self.elf.search_var_sym(&sym) {
+        match self.elf.search_var_sym(sym) {
             Some(s) => {
                 // シンボルの内容を表示
                 let addr = AdrFromRel::new(self.entry, s.st_value as usize);
                 println!("0x{:x}", self.read_mem(&addr));
             }
-            _ => println!("not found symbol: {}", sym)
+            _ => println!("not found symbol: {}", sym),
         };
     }
 
     /// シェルからのシンボル書き込み
     fn sh_write_sym(&self, sym: &str, val: &str) {
-         let val = match usize::from_str_radix(val.trim_start_matches("0x"), 16) {
+        let val = match usize::from_str_radix(val.trim_start_matches("0x"), 16) {
             Ok(v) => v,
             _ => {
                 println!("parse error: {}", val);
@@ -296,13 +319,13 @@ impl<'a> Debugger<'a> {
         };
 
         // シンボル探索
-        match self.elf.search_var_sym(&sym) {
+        match self.elf.search_var_sym(sym) {
             Some(s) => {
                 // シンボルの内容を書き換え
                 let addr = AdrFromRel::new(self.entry, s.st_value as usize);
                 self.write_mem(&addr, val);
             }
-            _ => println!("not found symbol: {}", sym)
+            _ => println!("not found symbol: {}", sym),
         };
     }
 
@@ -337,15 +360,17 @@ impl<'a> Debugger<'a> {
         match bp {
             Some(bp) => {
                 // 命令を元にもどす
-                write(
-                    self.pid,
-                    bp.addr.get() as AddressType,
-                    bp.inst as AddressType
-                ).expect("ptrace::write failed");
-
+                unsafe {
+                    write(
+                        self.pid,
+                        bp.addr.get() as AddressType,
+                        bp.inst as AddressType,
+                    )
+                    .expect("ptrace::write failed");
+                }
                 true
             }
-            None => false
+            None => false,
         }
     }
 
@@ -354,10 +379,14 @@ impl<'a> Debugger<'a> {
         let bps = self.breakpoint.get();
         if bps.is_empty() {
             println!("not entried breakpoint");
-        }
-        else {
+        } else {
             for (i, b) in self.breakpoint.get().iter().enumerate() {
-                println!("{}: {} (0x{:016x})", i, b.sym, self.to_sym_addr(b.addr.get()));
+                println!(
+                    "{}: {} (0x{:016x})",
+                    i,
+                    b.sym,
+                    self.to_sym_addr(b.addr.get())
+                );
             }
         }
     }
@@ -470,7 +499,10 @@ impl<'a> Debugger<'a> {
 
     /// メモリ書き込み
     fn write_mem<T: AddressTrait>(&self, addr: &T, val: usize) {
-        write(self.pid, addr.get() as AddressType, val as AddressType).expect("ptrace::write is failed");
+        unsafe {
+            write(self.pid, addr.get() as AddressType, val as AddressType)
+                .expect("ptrace::write is failed");
+        }
     }
 
     /// ヘルプ表示
@@ -497,4 +529,3 @@ impl<'a> Debugger<'a> {
         addr - self.entry
     }
 }
-

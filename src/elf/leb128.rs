@@ -3,7 +3,7 @@
 /// エラー情報
 #[derive(Debug)]
 pub enum LEB128Error {
-    DecodeError
+    DecodeError,
 }
 
 pub trait ULEB128 {

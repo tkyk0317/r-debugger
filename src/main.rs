@@ -1,18 +1,17 @@
+mod address;
+mod debugger;
+mod elf;
+mod memory_map;
+mod stracer;
+
+use crate::debugger::Debugger;
+use crate::stracer::Tracer;
+use nix::sys::ptrace::traceme;
+use nix::unistd::{execv, fork, ForkResult};
 use std::env;
+use std::ffi::CString;
 use std::fs;
 use std::path::Path;
-use std::ffi::{ CString };
-use nix::sys::ptrace::{ traceme };
-use nix::unistd::{fork, ForkResult, execv};
-
-mod debugger;
-mod stracer;
-mod memory_map;
-mod address;
-mod elf;
-
-use debugger::Debugger;
-use stracer::Tracer;
 
 /// メイン処理
 ///
@@ -29,35 +28,32 @@ fn main() {
     }
 
     // 子プロセス生成
-    match fork() {
+    match unsafe { fork() } {
         Ok(ForkResult::Parent { child }) => {
             if "trace" == args[1] {
                 let tracer = Tracer::new(child);
                 tracer.start();
-            }
-            else {
+            } else {
                 let abs_path = fs::canonicalize(path.to_string())
-                                   .expect("failed fs::canonicalize")
-                                   .as_path()
-                                   .to_str()
-                                   .unwrap()
-                                   .to_string();
+                    .expect("failed fs::canonicalize")
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string();
                 let mut dbg = Debugger::new(child, abs_path);
                 dbg.start();
             }
         }
         Ok(ForkResult::Child) => child(path),
-        Err(_) => println!("Fork failed")
+        Err(_) => println!("Fork failed"),
     }
 }
 
 /// 子プロセス実行
 fn child(path: &str) {
     // 自身をトレース対象とする
-    traceme().expect("faield traceme");
+    traceme().expect("failed traceme");
 
-    let options = [];
     let path = CString::new(path).unwrap();
-    execv(&path, &options).expect("execv is failed");
+    execv(&path, &[path.clone()]).expect("execv is failed");
 }
-
