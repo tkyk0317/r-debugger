@@ -5,6 +5,8 @@
         "Exprloc",
         "filesz",
         "memsz",
+        "opecode",
+        "opecoe",
         "paddr",
         "ptrace",
         "rtracer",

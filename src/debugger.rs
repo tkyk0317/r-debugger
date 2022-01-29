@@ -123,7 +123,7 @@ impl<'a> Debugger<'a> {
                         // シンボルロード（この段階でロードしないと子プロセスの情報が記載されていない）
                         // ※ execvコール後の一発目のシグナル
                         if let Err(err) = self.load_elf() {
-                            println!("cannot parset ELF: {:?}", err);
+                            println!("cannot parse ELF: {:?}", err);
                             self.sh_quit();
                         }
                     }
@@ -281,7 +281,7 @@ impl<'a> Debugger<'a> {
                 // シンボル→アドレス変換したものをブレイクポイント設定
                 let addr = s.st_value;
                 self.breakpoint(addr as usize, sym);
-                println!("Braekpoint at 0x{:x}", addr);
+                println!("BreakPoint at 0x{:x}", addr);
             }
             _ => println!("not found symbol: {}", sym),
         };

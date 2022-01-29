@@ -33,10 +33,10 @@ strace: build
 dbg: build
 	@ docker run \
 		--mount type=volume,src=r-debugger-dev-rust,target=/app/target \
-		-t \
+		-ti \
 		--rm \
 		r-debugger-dev \
-		cargo r -- dbg ./sample/test
+		bash -c "RUST_BACKTRACE=1 cargo r -- dbg ./sample/test"
 
 .PHONY: clippy
 clippy: docker-build
